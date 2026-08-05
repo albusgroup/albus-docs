@@ -1,0 +1,36 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Albus Documentation",
+  "colors": {
+    "primary": "#1F6FEB",
+    "light": "#3B82F6",
+    "dark": "#1D4ED8"
+  },
+  "api": {
+    "playground": {
+      "display": "interactive"
+    },
+    "examples": {
+      "languages": ["curl", "python", "javascript"],
+      "defaults": "required"
+    }
+  },
+  "navigation": [
+    {
+      "group": "Getting started",
+      "pages": ["index", "getting-started/api", "getting-started/python"]
+    },
+    {
+      "group": "Guides",
+      "pages": ["guides/agents", "guides/releases"]
+    },
+    {
+      "group": "Reference",
+      "pages": ["reference/overview"]
+    },
+    {
+      "group": "API reference",
+      "openapi": "openapi/openapi.yaml"
+    }
+  ]
+}

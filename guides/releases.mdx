@@ -1,0 +1,16 @@
+---
+title: Documentation release policy
+description: How the public documentation stays aligned with deployed Albus releases.
+---
+
+API reference is generated from an immutable OpenAPI snapshot. A snapshot is
+promoted only when its matching backend revision is deployed to production.
+
+The release record identifies:
+
+- the deployed API commit;
+- the OpenAPI snapshot used to generate the reference; and
+- the released `albus-sdk` version.
+
+This means `latest` documents the public production API, not a feature that is
+merely merged to the private source repository.
