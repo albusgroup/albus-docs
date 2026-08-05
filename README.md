@@ -5,8 +5,9 @@ used to render the production API reference at `docs.albus.com`.
 
 Mintlify is installed only on this repository and deploys pushes to `master`.
 It has no access to the private `albusgroup/albus` source repository. The
-private repository's release workflow uses an internal GitHub App to promote
-the already-deployed OpenAPI snapshot.
+private repository's release workflow uses the
+`ALBUS_DOCS_PUBLISH_TOKEN` Actions secret to promote the already-deployed
+OpenAPI snapshot.
 
 ## Release procedure
 
