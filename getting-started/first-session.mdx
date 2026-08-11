@@ -1,0 +1,125 @@
+---
+title: Run your first session
+description: Run an agent session from the CLI, Python, TypeScript, or cURL.
+---
+
+A session is a named conversation with an agent. You choose the identifier;
+running the same identifier again continues the same conversation. This first run
+needs nothing but a credential — Albus supplies the model.
+
+<CodeGroup>
+
+```bash CLI
+albus sessions run my-first-session \
+  --prompt "In one sentence, what is a session?" \
+  --agent-name demo \
+  --model gemini-3.6-flash
+```
+
+```python Python
+import os
+from albus_sdk import Albus, models
+
+with Albus(
+    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+) as albus:
+    response = albus.sessions.run_session(
+        id="my-first-session",
+        user_prompt="In one sentence, what is a session?",
+        agent_name="demo",
+        agent={"model": {"name": "gemini-3.6-flash"}},
+        wait=True,
+    )
+
+    for message in response.result.messages:
+        print(f"{message.role}: {message.content}")
+```
+
+```typescript TypeScript
+import { Albus } from "@albus-ts/sdk";
+
+const albus = new Albus({
+  security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
+});
+
+const response = await albus.sessions.runSession({
+  id: "my-first-session",
+  wait: true,
+  body: {
+    userPrompt: "In one sentence, what is a session?",
+    agentName: "demo",
+    agent: { model: { name: "gemini-3.6-flash" } },
+  },
+});
+
+for (const message of response.result.messages) {
+  console.log(`${message.role}: ${message.content}`);
+}
+```
+
+```bash cURL
+curl --fail-with-body \
+  --request POST "https://albus.sh/api/sessions/my-first-session?wait=true" \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  --header "Content-Type: application/json" \
+  --header "Idempotency-Key: first-run-1" \
+  --data '{
+    "user_prompt": "In one sentence, what is a session?",
+    "agent_name": "demo",
+    "agent": { "model": { "name": "gemini-3.6-flash" } }
+  }'
+```
+
+</CodeGroup>
+
+The call blocks until the assistant replies, then returns the session and its
+messages:
+
+```json
+{
+  "session": {
+    "id": "my-first-session",
+    "state": "DONE",
+    "invocation_count": 1,
+    "agent_name": "demo",
+    "agent_revision": "…",
+    "created_at": "…",
+    "updated_at": "…"
+  },
+  "messages": [
+    { "cursor": 1, "role": "user", "content": "In one sentence, what is a session?", "…": "…" },
+    { "cursor": 2, "role": "assistant", "content": "A session is …", "…": "…" }
+  ]
+}
+```
+
+## Continue the conversation
+
+Run the same session identifier again. The agent sees the earlier turns.
+
+```bash
+albus sessions run my-first-session \
+  --prompt "Now say that again in five words." \
+  --agent-name demo \
+  --model gemini-3.6-flash
+```
+
+## Read it back
+
+```bash
+albus sessions list
+albus sessions get my-first-session
+albus sessions audit my-first-session --limit 20
+```
+
+`get` returns the messages; [`audit`](/guides/audit-log) returns what happened
+inside the runs — model calls, tool calls, and outcomes.
+
+## What to read next
+
+- [Run a session](/guides/run-a-session) — waiting, resuming, idempotency, and
+  every failure mode. Read this before writing anything real.
+- [Connect MCP servers](/guides/mcp-servers) — give the agent tools.
+- [Use your own model key](/guides/model-providers) — bring your own provider.
+- [Alpha limitations](/alpha/limitations) — including the 20-run cap, which this
+  session just spent one of.

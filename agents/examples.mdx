@@ -1,0 +1,188 @@
+---
+title: Examples
+description: Complete, runnable Albus programs.
+---
+
+Every example is self-contained and assumes `ALBUS_API_KEY_AUTH` (SDKs) or
+`ALBUS_API_KEY` (CLI) is exported. See [authenticate](/getting-started/authenticate).
+
+## Run and resume a session
+
+<CodeGroup>
+
+```python Python
+import os
+from albus_sdk import Albus, models
+
+SESSION = "example-resume"
+AGENT = {"model": {"name": "gemini-3.6-flash"}}
+
+with Albus(
+    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+) as albus:
+    for prompt in ["Name three primary colors.", "Now sort them alphabetically."]:
+        response = albus.sessions.run_session(
+            id=SESSION,
+            user_prompt=prompt,
+            agent_name="example",
+            agent=AGENT,
+            wait=True,
+        )
+        print(response.result.messages[-1].content)
+```
+
+```typescript TypeScript
+import { Albus } from "@albus-ts/sdk";
+
+const albus = new Albus({
+  security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
+});
+
+const session = "example-resume";
+const agent = { model: { name: "gemini-3.6-flash" } };
+
+for (const userPrompt of [
+  "Name three primary colors.",
+  "Now sort them alphabetically.",
+]) {
+  const response = await albus.sessions.runSession({
+    id: session,
+    wait: true,
+    body: { userPrompt, agentName: "example", agent },
+  });
+  console.log(response.result.messages.at(-1)?.content);
+}
+```
+
+</CodeGroup>
+
+## Run unattended, retry safely
+
+Pass an idempotency key derived from the work item, not from the clock, so a
+retry re-attaches instead of running twice. Bound the wait and treat a timeout as
+"still running".
+
+```python Python
+import os
+from albus_sdk import Albus, models, errors
+
+TICKET = "support-1234"
+
+with Albus(
+    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+) as albus:
+    for attempt in range(3):
+        try:
+            response = albus.sessions.run_session(
+                id=TICKET,
+                user_prompt="Summarize this ticket for the on-call engineer.",
+                agent_name="support-triage",
+                agent={"model": {"name": "gemini-3.6-flash"}},
+                idempotency_key=f"{TICKET}-summary-v1",
+                wait=True,
+                wait_timeout=120,
+            )
+            print(response.result.messages[-1].content)
+            break
+        except errors.AlbusError as error:
+            # 504: the run is still going — the same key re-attaches to it.
+            # 429: the organization's alpha quota is spent; retrying will not help.
+            if error.status_code != 504:
+                raise
+    else:
+        print("still running after three waits")
+```
+
+## Give the agent GitHub tools
+
+```python Python
+import os
+from albus_sdk import Albus, models
+
+with Albus(
+    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+) as albus:
+    albus.secrets.create_secret(
+        name="integrations/github/token",
+        value=f"Bearer {os.environ['GITHUB_TOKEN']}",
+    )
+
+    response = albus.sessions.run_session(
+        id="repo-triage",
+        user_prompt="Find open issues mentioning login failures and summarize them.",
+        agent_name="repo-triage",
+        agent={
+            "model": {"name": "gemini-3.6-flash"},
+            "system_prompt": "You investigate GitHub issues. Cite issue numbers.",
+            "mcp_servers": [
+                {
+                    "name": "github",
+                    "url": "https://api.githubcopilot.com/mcp/",
+                    "headers": {
+                        "Authorization": "albus.sh/secrets/integrations/github/token"
+                    },
+                    "allowed_tools": ["search_issues", "get_issue"],
+                }
+            ],
+        },
+        wait=True,
+    )
+    print(response.result.messages[-1].content)
+```
+
+See [MCP servers](/guides/mcp-servers) for the rules the `mcp_servers` block
+follows.
+
+## Debug a run
+
+```bash
+albus sessions get support-1234
+albus sessions audit support-1234 --limit 50 | jq '.events[] | {type, agent_revision, event_time}'
+albus agents revision support-triage "$(albus sessions get support-1234 | jq -r '.session.agent_revision')"
+```
+
+The [audit log](/guides/audit-log) is what happened inside the run; `agents
+revision` is the exact configuration that ran it.
+
+## Fan out across sessions
+
+A session runs one invocation at a time (`423` otherwise), so concurrency lives
+across session ids.
+
+```python Python
+import asyncio, os
+from albus_sdk import AsyncAlbus, models
+
+TICKETS = ["support-1", "support-2", "support-3"]
+
+
+async def summarize(albus: AsyncAlbus, ticket: str) -> str:
+    response = await albus.sessions.run_session(
+        id=ticket,
+        user_prompt="Summarize this ticket.",
+        agent_name="support-triage",
+        agent={"model": {"name": "gemini-3.6-flash"}},
+        idempotency_key=f"{ticket}-summary-v1",
+        wait=True,
+        wait_timeout=300,
+    )
+    return response.result.messages[-1].content
+
+
+async def main() -> None:
+    async with AsyncAlbus(
+        security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    ) as albus:
+        for summary in await asyncio.gather(
+            *(summarize(albus, ticket) for ticket in TICKETS)
+        ):
+            print(summary)
+
+
+asyncio.run(main())
+```
+
+<Warning>
+Each run counts against the alpha cap of 20 per organization. Fan out
+deliberately.
+</Warning>

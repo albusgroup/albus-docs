@@ -1,0 +1,56 @@
+---
+title: Alpha limitations
+description: What Albus does not do yet, and what arrives in beta.
+---
+
+Albus is in alpha. Everything below is deliberate scope, not a defect — read it
+before you build on the platform, because each item changes what you should ask
+an agent to do.
+
+## Quota: 20 session runs per organization
+
+Every invocation counts, across every session, for the lifetime of the
+organization. Once the cap is reached, a run returns `429` with
+`ErrQuotaExceeded` and nothing executes.
+
+Email [carlo@albus.sh](mailto:carlo@albus.sh) to have the cap raised. Do not
+retry a `429` in a loop; it will not clear on its own.
+
+## No agent memory
+
+An agent remembers nothing outside the session it is running in. Sessions do not
+share state, there is no cross-session store an agent can write to, and a run
+loads at most the session's 1000 most recent messages as history.
+
+Keep long-lived context in your own system and pass what matters in the prompt or
+the system prompt.
+
+## No code execution
+
+The agent cannot run code, execute shell commands, or read and write files. Its
+capabilities are the built-in tools (`WEB_SEARCH`) and the tools exposed by the
+[MCP servers you declare](/guides/mcp-servers) — nothing else.
+
+## No execution durability
+
+A run that fails is not resumed or retried. If the execution environment dies
+mid-run, the invocation fails and the work is lost; the API answers `502` with
+the failure kind and detail.
+
+Retrying is your call: reusing the failed run's idempotency key re-attaches to it
+and returns the same failure, so start a new run with a **new** key. Keep runs
+short enough that losing one is cheap.
+
+## Limited observability
+
+There is a [per-session audit log](/guides/audit-log) — model calls, tool calls
+and their output, and run outcomes — and that is the whole of it. There are no
+traces, no metrics, no dashboards, no alerting, and no cross-session search. Log
+what you need on your side, keyed by session id and idempotency key.
+
+## Coming in beta
+
+Agent memory, code execution, richer agent observability, and durable execution
+are all beta work, along with a higher run cap. Tell
+[carlo@albus.sh](mailto:carlo@albus.sh) which one blocks you — that is what
+orders the list.

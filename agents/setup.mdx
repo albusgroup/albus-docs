@@ -1,0 +1,187 @@
+---
+title: Set up Albus (for coding agents)
+description: The complete procedure for a coding agent to install, authenticate, and verify Albus on a user's machine.
+---
+
+{/* This page is written for a coding agent executing the setup, and is the
+    canonical target for "read this and set up Albus". Keep it imperative,
+    complete, and free of prose a machine has to interpret. */}
+
+You are setting up Albus for the user of this machine. Albus runs agent sessions
+over an HTTP API. Follow these steps in order. Do not skip verification.
+
+Access is by invitation during alpha. If step 4 reports `not_provisioned`, stop
+and tell the user to email carlo@albus.sh with the Google address they sign in
+with.
+
+## 1. Install the CLI
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
+```
+
+On Windows: `irm https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.ps1 | iex`.
+
+The installer uses `uv tool install`, then `pip install --user`, then conda. If
+`albus` is not on `PATH` afterwards, it is in the scripts directory the
+installer printed (usually `~/.local/bin`).
+
+## 2. Check what state you are in
+
+```bash
+albus status
+```
+
+```json
+{
+  "cli_version": "0.2.0",
+  "base_url": "https://albus.sh/api",
+  "credential": "none",
+  "authenticated": false
+}
+```
+
+`credential` is `api_key` when `ALBUS_API_KEY` is set, `session` when the user is
+signed in, `none` otherwise. If `authenticated` is already `true`, skip to step 4.
+
+## 3. Authenticate
+
+You cannot complete a browser sign-in yourself. Print the URL and let the user
+open it.
+
+```bash
+albus login --no-browser
+```
+
+The command prints the authorization URL on its own line and then blocks until
+the user finishes, for up to 180 seconds. Show the URL to the user verbatim and
+ask them to open it. Do not open a browser on their behalf, and do not paste
+their credentials anywhere.
+
+If the user already has an organization API key, that works instead and needs no
+browser:
+
+```bash
+export ALBUS_API_KEY="alb-…"
+```
+
+## 4. Verify
+
+```bash
+albus whoami
+```
+
+A JSON object with the user's email and organizations means setup is complete. An
+error containing `not in the Albus beta` means the account is not provisioned —
+stop and tell the user to email carlo@albus.sh.
+
+## 5. Run one session
+
+Do this once, to prove the setup end to end. It consumes one of the
+organization's 20 alpha runs, so run it once and do not loop.
+
+```bash
+albus sessions run setup-check \
+  --prompt "Reply with exactly: albus is working" \
+  --agent-name setup-check \
+  --model gemini-3.6-flash
+```
+
+The command prints the session and its messages as JSON. The assistant message is
+the last element of `messages`.
+
+## 6. Install an SDK, if the user is writing code
+
+```bash
+pip install albus-sdk          # Python
+npm install @albus-ts/sdk      # TypeScript
+```
+
+Both need an organization API key, which is a different credential from the
+browser session. Mint one (this requires the browser session from step 3):
+
+```bash
+albus tokens create local-dev
+```
+
+The `token` field is shown once. Have the user store it, then:
+
+```bash
+export ALBUS_API_KEY="alb-…"          # the CLI reads this
+export ALBUS_API_KEY_AUTH="alb-…"     # the SDKs read this
+```
+
+Never write the key into a source file, a committed config, or a shell profile
+you did not create for this purpose.
+
+## Minimal working code
+
+```python Python
+import os
+from albus_sdk import Albus, models
+
+with Albus(
+    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+) as albus:
+    response = albus.sessions.run_session(
+        id="demo-session",
+        user_prompt="Say hello.",
+        agent_name="demo",
+        agent={"model": {"name": "gemini-3.6-flash"}},
+        wait=True,
+    )
+    print(response.result.messages[-1].content)
+```
+
+```typescript TypeScript
+import { Albus } from "@albus-ts/sdk";
+
+const albus = new Albus({
+  security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
+});
+
+const response = await albus.sessions.runSession({
+  id: "demo-session",
+  wait: true,
+  body: {
+    userPrompt: "Say hello.",
+    agentName: "demo",
+    agent: { model: { name: "gemini-3.6-flash" } },
+  },
+});
+
+console.log(response.result.messages.at(-1)?.content);
+```
+
+## Rules that matter when you write Albus code
+
+- **The session id is chosen by the caller.** The same id resumes the same
+  conversation; a new id starts a new one. Do not generate a fresh id per turn.
+- **Pass an idempotency key** on anything that runs unattended. Reusing a key
+  re-attaches to that invocation instead of running again; a new key while one is
+  still running returns `423`.
+- **One invocation per session at a time.** Fan out across session ids, not
+  within one.
+- **Credentials are never inlined.** Store them with `albus secrets create` and
+  reference them as `albus.sh/secrets/<name>` in the agent configuration. This is
+  required for `model.provider.credential`, and optional-but-correct for MCP
+  headers.
+- **20 runs per organization in alpha.** `429` means the cap is reached. Never
+  retry a run in a loop.
+- **`--agent-file` replaces the other agent flags** and cannot be combined with
+  them.
+
+## Where the rest of the documentation is
+
+| Need | Read |
+|---|---|
+| Full index, machine-readable | https://docs.albus.sh/llms.txt |
+| Whole corpus, one file | https://docs.albus.sh/llms-full.txt |
+| Running sessions in depth | https://docs.albus.sh/guides/run-a-session.md |
+| MCP servers and their secrets | https://docs.albus.sh/guides/mcp-servers.md |
+| Secrets | https://docs.albus.sh/guides/secrets.md |
+| Runnable examples | https://docs.albus.sh/agents/examples.md |
+| HTTP contract | https://docs.albus.sh/openapi/openapi.yaml |
+| What alpha cannot do | https://docs.albus.sh/alpha/limitations.md |
+
+Any documentation page is available as markdown by appending `.md` to its URL.

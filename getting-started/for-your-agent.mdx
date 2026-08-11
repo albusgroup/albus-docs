@@ -1,0 +1,62 @@
+---
+title: Hand it to your coding agent
+description: Let Codex, Claude Code, or Cursor install, authenticate, and write your Albus integration.
+---
+
+Albus is designed to be set up by an agent. The CLI's browser sign-in is the only
+step an agent cannot do for you, and it hands that step back to you as a URL.
+
+## Paste this
+
+Into Codex, Claude Code, Cursor, or any agent that can run shell commands and
+fetch a URL:
+
+```text
+Set up Albus for me. Read https://docs.albus.sh/agents/setup.md and follow it
+exactly. When you need me to sign in, print the URL and wait.
+```
+
+That page is the whole procedure: install, `albus status`, `albus login
+--no-browser`, verify with `albus whoami`, one test run, then the SDK. It states
+the rules that matter — caller-chosen session ids, idempotency keys, secret
+references, the 20-run alpha cap — so the agent writes correct code instead of
+guessing.
+
+## Then ask for what you actually want
+
+```text
+Write a script that summarizes a support ticket with Albus. Use one session per
+ticket id, pass an idempotency key so retries are safe, and read
+https://docs.albus.sh/guides/run-a-session.md first.
+```
+
+```text
+Give the agent GitHub tools: store my token as an Albus secret and declare the
+GitHub MCP server. See https://docs.albus.sh/guides/mcp-servers.md.
+```
+
+## If you already have things installed
+
+An agent that starts from a machine where you are signed in only needs the docs,
+not the setup:
+
+```text
+Albus is installed and I'm signed in. Read https://docs.albus.sh/llms.txt, then
+build <what you want>.
+```
+
+## What to give an agent, in general
+
+Any documentation page is available as markdown by appending `.md` — that is what
+you want an agent fetching, not the rendered page.
+
+| URL | What it is |
+|---|---|
+| [/agents/setup.md](https://docs.albus.sh/agents/setup.md) | Setup procedure, imperative and complete |
+| [/agents/examples.md](https://docs.albus.sh/agents/examples.md) | Runnable programs to adapt |
+| [/llms.txt](https://docs.albus.sh/llms.txt) | Index of every page |
+| [/llms-full.txt](https://docs.albus.sh/llms-full.txt) | The whole corpus in one file |
+| [/openapi/openapi.yaml](https://docs.albus.sh/openapi/openapi.yaml) | The HTTP contract, for a code generator |
+
+Prefer naming the specific page over the whole corpus: an agent given
+`llms-full.txt` spends its context on pages irrelevant to the task.

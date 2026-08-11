@@ -1,0 +1,114 @@
+---
+title: Troubleshooting
+description: Every error Albus and the CLI report, and what to do about it.
+---
+
+## Authentication and access
+
+**`this account is not in the Albus beta. Email carlo@albus.sh to request access.`**
+(API: `403` with `"code": "not_provisioned"`)
+Your credential is valid; the account is not on the alpha roster. [Request
+access](/getting-started/access). Nothing about your setup needs changing.
+
+**`401 Unauthorized`**
+The credential is missing, expired, or belongs to a different API. Check, in
+order: which base URL you are calling (`albus status`), whether `ALBUS_API_KEY` is
+exported and current, and whether the stored session is still good
+(`albus whoami`). Remember the CLI prefers an exported `ALBUS_API_KEY` over the
+stored session — an old key in your shell beats a fresh `albus login`.
+
+**`albus whoami` says to run `albus login` even though `ALBUS_API_KEY` is set**
+Expected. `whoami` and `tokens` identify *you*, and an organization API key
+cannot. Sign in.
+
+**`no Auth0 tenant configured for <url>`**
+`albus login` has no sign-in configuration for that base URL. Check `--base-url`
+and `ALBUS_BASE_URL`; if you are pointing at a local server, export the
+`ALBUS_AUTH0_*` variables for it.
+
+**`could not listen for the sign-in redirect on 8484, 8485, 8486, 8487`**
+Every loopback port `albus login` uses is taken. Close whatever holds them, or use
+`albus login --no-browser` and open the URL yourself.
+
+**`no sign-in completed within 180 seconds`**
+The browser never delivered the redirect. Run it again. If the message adds
+*"N redirect(s) carried another state"*, a stale tab from an earlier sign-in
+answered instead — close it first.
+
+## Running sessions
+
+**`423` — another invocation is currently running**
+A session runs one invocation at a time. Wait for it, retry with the running
+invocation's idempotency key to attach to it, or use a different session id.
+Concurrency belongs across sessions, not within one.
+
+**`409` — idempotency key reused with a different body**
+The same key was already used for a different prompt or agent configuration.
+Use a new key, or resend exactly the original body.
+
+**`429` — quota exceeded**
+The organization has spent its [20 alpha runs](/alpha/limitations). Retrying will
+not help; email [carlo@albus.sh](mailto:carlo@albus.sh).
+
+**`504` — timed out waiting for the assistant response**
+Your `wait_timeout` elapsed; the run continues. Retry the **same** idempotency key
+to re-attach, or poll `albus sessions get`. Do not start a new key — you would run
+the prompt twice.
+
+**`502` — the run failed instead of producing a response**
+The body carries the failure kind and detail. Look at
+`albus sessions audit <session>` for the last `model_call`/`tool_call` and the
+`run_failed` event. Then run again with a **new** idempotency key; reusing the
+failed key replays the failure.
+
+**`400` — invalid request**
+Something was rejected before anything ran: an unknown tool name, an MCP server
+missing `name` or `url`, a missing `model`, a malformed secret reference, or a
+reference to a secret that does not exist.
+
+**`--agent-file holds the whole agent configuration and cannot be combined with the other agent options`**
+Move `--model` (and any other agent flag) into the JSON file.
+
+**`--model is required unless --agent-file is given`** / **`--provider and --credential must be given together`**
+Exactly what they say.
+
+## Secrets and MCP
+
+**`invalid secret reference`**
+A credential field got something that is not `albus.sh/secrets/<name>`. Provider
+credentials must be references; MCP header values may be literals.
+
+**`invalid secret name`**
+Names are `/`-separated segments of `[a-zA-Z0-9_-]`, up to 255 characters, with no
+empty, `.`, or `..` segments. No leading or trailing slash.
+
+**The agent never calls an MCP tool**
+Either the tool is not in `allowed_tools` (omit the field to allow all of them),
+or the prompt gave the model no reason to call it. `albus sessions audit` shows
+which tools were called.
+
+**The MCP server rejects Albus's calls**
+The header value is wrong. Store the *complete* header value including any scheme
+— `Bearer ghp_…`, not `ghp_…`. Confirm the server speaks Streamable HTTP at the
+URL you gave; `stdio` servers cannot be reached.
+
+## Installation
+
+**`albus: command not found` right after installing**
+The install directory is not on `PATH` — usually `~/.local/bin`. Open a new
+shell, or add it.
+
+**`need uv, pip, or conda on PATH`**
+The installer found no Python package manager. Install `uv`
+(`curl -LsSf https://astral.sh/uv/install.sh | sh`) and run it again.
+
+**`could not use <path>/credentials.json`**
+The config directory is read-only or owned by another user — ordinary where agents
+run. Fix its permissions, or point `ALBUS_CONFIG_DIR` at a writable directory. An
+exported `ALBUS_API_KEY` avoids the disk entirely.
+
+## Still stuck
+
+Collect `albus status`, the session id, the run's `idempotency_key`, and
+`albus sessions audit <session-id>`, then email
+[carlo@albus.sh](mailto:carlo@albus.sh). Never include a key or secret value.

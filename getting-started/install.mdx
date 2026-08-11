@@ -1,0 +1,69 @@
+---
+title: Install
+description: Install the albus CLI, and the Python or TypeScript SDK.
+---
+
+## CLI
+
+The `albus` CLI is the fastest way to run a session, and the only way to sign in
+with a browser. It is a Python package; the installer picks `uv`, `pip --user`,
+or `pip` inside a conda environment, in that order.
+
+<CodeGroup>
+
+```bash macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
+```
+
+```powershell Windows
+irm https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.ps1 | iex
+```
+
+```bash uv
+uv tool install albus-cli
+```
+
+```bash pip
+pip install --user albus-cli
+```
+
+</CodeGroup>
+
+Pin a version by setting `ALBUS_CLI_VERSION` on the shell that reads the script,
+not on `curl`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | ALBUS_CLI_VERSION=0.1.0 sh
+```
+
+Confirm the install, then sign in:
+
+```bash
+albus --version
+albus login
+```
+
+If `albus` is not found, the install directory is not on your `PATH` — usually
+`~/.local/bin`. Open a new shell, or add it.
+
+## SDKs
+
+<CodeGroup>
+
+```bash Python
+pip install albus-sdk
+```
+
+```bash TypeScript
+npm install @albus-ts/sdk
+```
+
+</CodeGroup>
+
+Both are generated from the same [OpenAPI
+contract](https://docs.albus.sh/openapi/openapi.yaml) as the API reference and
+default to `https://albus.sh/api`. They authenticate with an API key, which you
+mint after signing in — see [Authenticate](/getting-started/authenticate).
+
+Next: [authenticate](/getting-started/authenticate), then [run your first
+session](/getting-started/first-session).

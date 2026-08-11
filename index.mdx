@@ -1,24 +1,66 @@
 ---
-title: Albus documentation
-description: Build, run, and integrate AI agents with Albus.
+title: Albus
+description: Run agent sessions over an HTTP API — a CLI, two SDKs, MCP tools, and organization-scoped secrets.
 ---
 
-Albus provides an HTTP API and the `albus-sdk` Python package for building and
-running agents.
+Albus runs an agent for you. You send a prompt and an agent configuration; Albus
+executes the model loop in an isolated environment, connects the MCP servers you
+declare, and returns the assistant's reply. A session keeps its history, so the
+next prompt continues the conversation.
+
+<Note>
+Albus is in **alpha**, by invitation, with a cap of 20 session runs per
+organization. Read [what alpha does not do yet](/alpha/limitations) before you
+build on it.
+</Note>
+
+## Run your first session
+
+<Steps>
+  <Step title="Get access">
+    Alpha is invite-only. [Request access](/getting-started/access).
+  </Step>
+  <Step title="Install the CLI">
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
+    ```
+  </Step>
+  <Step title="Sign in">
+    ```bash
+    albus login
+    ```
+  </Step>
+  <Step title="Run">
+    ```bash
+    albus sessions run my-first-session \
+      --prompt "In one sentence, what is a session?" \
+      --agent-name demo \
+      --model gemini-3.6-flash
+    ```
+  </Step>
+</Steps>
+
+No model API key of your own is needed for that run — Albus provides the default
+model. See [Run your first session](/getting-started/first-session) for the same
+thing in Python, TypeScript, and cURL.
+
+## Next
 
 <CardGroup cols={2}>
-  <Card title="Make your first API call" icon="rocket" href="/getting-started/api">
-    Authenticate and call the API with cURL.
+  <Card title="Run a session" icon="play" href="/guides/run-a-session">
+    Sessions, resuming, waiting, idempotency, and every failure mode.
   </Card>
-  <Card title="Use the Python SDK" icon="python" href="/getting-started/python">
-    Install `albus-sdk` and make your first request.
+  <Card title="Connect MCP servers" icon="plug" href="/guides/mcp-servers">
+    Give an agent tools, with credentials stored as Albus secrets.
+  </Card>
+  <Card title="Set up from a coding agent" icon="robot" href="/agents/setup">
+    The procedure to hand to Codex, Claude Code, or Cursor.
+  </Card>
+  <Card title="Alpha limitations" icon="triangle-exclamation" href="/alpha/limitations">
+    What is not there yet, and what arrives in beta.
   </Card>
 </CardGroup>
 
-## Reference material
-
-- [API reference](/reference/overview) is generated from the OpenAPI contract.
-- [Agent integrations](/guides/agents) explains the stable documents and
-  conventions available to coding agents.
-- [Release policy](/guides/releases) explains how published documentation maps
-  to deployed API and SDK versions.
+Using a coding agent? Point it at
+[docs.albus.sh/agents/setup.md](https://docs.albus.sh/agents/setup.md), or at
+[llms.txt](https://docs.albus.sh/llms.txt) for the whole documentation index.

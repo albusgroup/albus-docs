@@ -1,0 +1,50 @@
+---
+title: Agents and revisions
+description: How agent_name groups runs, and how configuration changes become revisions.
+---
+
+You never create an agent. You name one on a run, and Albus records it:
+
+- **Agent** — every run sharing an `agent_name` is one agent.
+- **Revision** — each distinct agent configuration under that name is a revision,
+  identified by a hash of the configuration.
+
+So an agent's history is discoverable from the runs themselves: change the system
+prompt, add an MCP server, or raise `max_steps`, and the next run creates a new
+revision. Run the same configuration again and it reuses the existing one.
+
+```bash
+albus agents list
+albus agents get support-triage
+albus agents revision support-triage "$revision"
+```
+
+`agents get` returns the current revision's full configuration plus every
+revision, newest first. `agents revision` returns one revision's configuration —
+the exact model, prompt, tools, and MCP servers a run used.
+
+Every session response carries `session.agent_name` and
+`session.agent_revision`, and every audit event carries `agent_revision`. That is
+the link from an output you are unhappy with back to the configuration that
+produced it:
+
+```bash
+albus sessions get support-1234 | jq '.session.agent_revision'
+albus agents revision support-triage "$(albus sessions get support-1234 | jq -r '.session.agent_revision')"
+```
+
+## Use it deliberately
+
+Keep `agent_name` stable for one job (`support-triage`, `pr-reviewer`) rather
+than per run or per customer — that is what makes the revision list a useful
+history instead of a list of one-offs. Session ids are where per-run identity
+belongs.
+
+Because a revision is derived from the configuration, it is also the safest thing
+to record in your own system: storing the revision with your result tells you
+later exactly what produced it, even after you have changed the agent.
+
+<Note>
+A revision is configuration only. It does not pin the model's behavior, and
+credentials are references, so rotating a secret does not create a new revision.
+</Note>

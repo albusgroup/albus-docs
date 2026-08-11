@@ -1,0 +1,71 @@
+---
+title: Use your own model key
+description: Point a run at your own model provider and credential.
+---
+
+Omit `model.provider` and Albus runs the model on its own credentials — the
+fastest path, and enough for the alpha. Name a provider to use your own account
+instead: your quota, your rate limits, your billing.
+
+## Store the key, then name the provider
+
+```bash
+printf 'your-provider-api-key' | albus secrets create providers/gemini/prod
+```
+
+<CodeGroup>
+
+```bash CLI
+albus sessions run my-session -p "hello" \
+  --agent-name my-agent \
+  --model gemini-3.6-flash \
+  --provider gemini \
+  --credential albus.sh/secrets/providers/gemini/prod
+```
+
+```json agent.json
+{
+  "model": {
+    "name": "gemini-3.6-flash",
+    "provider": {
+      "name": "gemini",
+      "credential": "albus.sh/secrets/providers/gemini/prod"
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+In the CLI, `--provider` and `--credential` must be given together.
+
+| Field | Meaning |
+|---|---|
+| `name` | Provider name, e.g. `gemini`, `vertex`, `openai`. |
+| `credential` | A [secret reference](/guides/secrets) — `albus.sh/secrets/<name>`. A raw key here is rejected. |
+| `url` | Base URL override for the provider endpoint. Agent-file only; there is no CLI flag. |
+
+`url` is how you reach an OpenAI-compatible gateway or a self-hosted endpoint:
+
+```json
+{
+  "model": {
+    "name": "my-model",
+    "provider": {
+      "name": "openai",
+      "url": "https://gateway.internal.example.com/v1",
+      "credential": "albus.sh/secrets/providers/gateway/key"
+    }
+  }
+}
+```
+
+<Note>
+The model must be one the named provider actually serves, and the credential must
+authorize it. A mismatch surfaces as a failed run (`502`) rather than a rejected
+request, because it is the provider that refuses it — check
+[the audit log](/guides/audit-log) for the model call.
+</Note>
+
+Rotating the key is an `albus secrets update`: the reference does not change, so
+the agent configuration and its revision stay the same.
