@@ -9,13 +9,14 @@ exact URL from the CLI, the SDK READMEs, and the console:
 
 | Page | URL agents are given |
 |---|---|
-| `agents/setup.mdx` | https://docs.albus.sh/agents/setup.md |
-| `agents/examples.mdx` | https://docs.albus.sh/agents/examples.md |
+| `agents/docs.mdx` | https://docs.albus.sh/agents/docs.md |
 
-Keep `agents/setup.mdx` imperative, complete, and executable end to end: it is
-the target of "read this and set up Albus", so a step that is wrong there is a
-failed setup, not a confusing paragraph. Both pages must stay in sync with the
-CLI's actual commands and error strings.
+One page, deliberately: an agent given a URL reads that URL and rarely follows
+links, so setup, the API surface, the rules, and the examples all live there.
+Keep it imperative, complete, and executable end to end — it is the target of
+"read this and use Albus", so a step that is wrong there is a failed setup, not a
+confusing paragraph — and keep it in sync with the CLI's actual commands and
+error strings.
 
 Mintlify is installed only on this repository and deploys pushes to `master`.
 It has no access to the private `albusgroup/albus` source repository. The

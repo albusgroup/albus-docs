@@ -50,7 +50,7 @@
       },
       {
         "group": "For coding agents",
-        "pages": ["agents/setup", "agents/examples"]
+        "pages": ["agents/docs"]
       },
       {
         "group": "Alpha",
@@ -95,7 +95,15 @@
     },
     {
       "source": "/guides/agents",
-      "destination": "/agents/setup"
+      "destination": "/agents/docs"
+    },
+    {
+      "source": "/agents/setup",
+      "destination": "/agents/docs"
+    },
+    {
+      "source": "/agents/examples",
+      "destination": "/agents/docs"
     }
   ]
 }

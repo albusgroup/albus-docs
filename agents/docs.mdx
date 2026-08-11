@@ -1,0 +1,434 @@
+---
+title: Albus for coding agents
+description: One page: what Albus is, how to set it up, the whole API surface, the rules, and runnable examples.
+---
+
+{/* This page is the canonical target for "read this and use Albus": it is what
+    the CLI prints, and it is meant to be read whole by a machine. Keep it
+    imperative, complete, and self-sufficient — an agent that reads only this
+    file must be able to set Albus up and write correct code against it. */}
+
+Albus runs agent sessions over an HTTP API. A **session** is a named
+conversation with an agent: you choose the identifier, and running the same
+identifier again continues that conversation. One HTTP call runs a turn and
+returns the assistant's reply.
+
+You are probably reading this to set Albus up for the user of this machine, or to
+write code against it. Both are below, in order. Do not skip verification.
+
+## Alpha limits
+
+Read these before designing anything.
+
+- **20 session runs per organization**, ever, in the alpha. `429` means the cap
+  is spent. Never retry a run in a loop.
+- **Access is by invitation.** A `403` naming `not_provisioned` means the account
+  is not enabled: stop and tell the user to email carlo@albus.sh with the Google
+  address they sign in with.
+- **No memory across sessions.** The agent sees the turns of its own session and
+  nothing else.
+- **No code execution**, no durable execution (a crashed run does not resume),
+  and no traces, metrics, or alerting — the per-session
+  [audit log](/guides/audit-log) is the observability that exists.
+
+Full detail: [alpha limitations](/alpha/limitations).
+
+## Setup
+
+### 1. Install the CLI
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
+```
+
+On Windows: `irm https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.ps1 | iex`.
+
+The installer uses `uv tool install`, then `pip install --user`, then conda. If
+`albus` is not on `PATH` afterwards, it is in the scripts directory the installer
+printed (usually `~/.local/bin`).
+
+### 2. Check what state you are in
+
+```bash
+albus status
+```
+
+```json
+{
+  "cli_version": "0.2.0",
+  "base_url": "https://albus.sh/api",
+  "credential": "none",
+  "authenticated": false
+}
+```
+
+`credential` is `api_key` when `ALBUS_API_KEY` is set, `session` when the user is
+signed in, `none` otherwise. A working session also reports `email` and
+`organizations`; a credential that does not work reports `error`. The command
+exits 0 either way — read the JSON, not the exit code. If `authenticated` is
+already `true`, skip to step 4.
+
+### 3. Authenticate
+
+You cannot complete a browser sign-in yourself. Print the URL and let the user
+open it.
+
+```bash
+albus login --no-browser
+```
+
+The command prints the authorization URL on its own line, then blocks until the
+user finishes, for up to 180 seconds. Show the URL verbatim and ask them to open
+it. Do not open a browser on their behalf, and do not paste their credentials
+anywhere.
+
+The sign-in redirects to `127.0.0.1:8484-8487` on the machine running the CLI. If
+that is not the machine the user's browser is on, tell them to forward those
+ports (`ssh -L 8484:localhost:8484 …`), or to sign in on their own machine and
+set `ALBUS_API_KEY` here instead.
+
+An organization API key works instead and needs no browser:
+
+```bash
+export ALBUS_API_KEY="alb-…"
+```
+
+### 4. Verify
+
+```bash
+albus whoami
+```
+
+JSON with the user's email and organizations means setup is complete. An error
+naming the Albus beta means the account is not provisioned — stop, and tell the
+user to email carlo@albus.sh.
+
+### 5. Run one session
+
+Do this once, to prove the setup end to end. It spends one of the organization's
+20 alpha runs, so run it once and do not loop.
+
+```bash
+albus sessions run setup-check \
+  --prompt "Reply with exactly: albus is working" \
+  --agent-name setup-check \
+  --model gemini-3.6-flash
+```
+
+The assistant's reply is the last element of `messages`.
+
+### 6. Install an SDK, if the user is writing code
+
+```bash
+pip install albus-sdk          # Python
+npm install @albus-ts/sdk      # TypeScript
+```
+
+Both authenticate with an organization API key, which is a different credential
+from the browser session. Minting one requires the browser session from step 3:
+
+```bash
+albus tokens create local-dev
+```
+
+The `token` field is shown once. Have the user store it, then:
+
+```bash
+export ALBUS_API_KEY="alb-…"          # the CLI reads this
+export ALBUS_API_KEY_AUTH="alb-…"     # the SDKs read this
+```
+
+Never write the key into a source file, a committed config, or a shell profile
+you did not create for this purpose.
+
+## The whole API surface
+
+Base URL `https://albus.sh/api`. Authenticate with `Authorization: Bearer <key>`.
+
+| Operation | HTTP | CLI |
+|---|---|---|
+| Run or resume a session | `POST /sessions/{id}` | `albus sessions run ID -p TEXT --agent-name NAME --model NAME` |
+| List sessions | `GET /sessions` | `albus sessions list` |
+| Get a session and its messages | `GET /sessions/{id}` | `albus sessions get ID` |
+| Audit what happened in it | `GET /sessions/{id}/audit` | `albus sessions audit ID` |
+| Delete a session | `DELETE /sessions/{id}` | `albus sessions delete ID` |
+| Store a credential | `POST /secrets` | `albus secrets create NAME --value V` |
+| List, read, update, delete secrets | `/secrets`, `/secrets/{name}` | `albus secrets list\|get\|update\|delete` |
+| List agents, get one | `GET /agents`, `GET /agents/{name}` | `albus agents list\|get` |
+| Get the exact configuration a run used | `GET /agents/{name}/revisions/{revision}` | `albus agents revision NAME REVISION` |
+| Mint or manage API keys | `/tokens` | `albus tokens create\|list\|get\|delete` |
+| Who am I | `GET /whoami` | `albus whoami` |
+| Service health | `GET /health` | `albus health` |
+
+`/whoami` and `/tokens` accept only a user bearer token, not an API key.
+
+### Running a session
+
+```http
+POST /sessions/{id}?wait=true&wait_timeout=120
+Idempotency-Key: <your key>
+
+{
+  "user_prompt": "…",
+  "agent_name": "support-triage",
+  "agent": {
+    "model": { "name": "gemini-3.6-flash" },
+    "system_prompt": "…",
+    "tools": ["WEB_SEARCH"],
+    "max_steps": 12,
+    "mcp_servers": [
+      {
+        "name": "github",
+        "url": "https://api.githubcopilot.com/mcp/",
+        "headers": { "Authorization": "albus.sh/secrets/integrations/github/token" },
+        "allowed_tools": ["search_issues", "get_issue"]
+      }
+    ]
+  }
+}
+```
+
+- `wait=true` (the default in the CLI and SDKs) blocks until the assistant
+  replies and returns the session with its messages. `wait=false` returns as soon
+  as the run is accepted; poll `GET /sessions/{id}`.
+- `wait_timeout` bounds the wait server-side. Exceeding it is `504`, and the run
+  is still going.
+- Omitting `agent.model.provider` uses the model credential Albus supplies, which
+  is what a first run should do. To bring your own, store it as a secret and
+  reference it — see [model providers](/guides/model-providers).
+- `mcp_servers` requires a Streamable HTTP MCP endpoint. `allowed_tools` names
+  tools as the server names them; the agent sees them prefixed, as
+  `github__search_issues`. Omit it to allow every tool the server exposes. See
+  [MCP servers](/guides/mcp-servers).
+
+### Failures and what to do about them
+
+| Status | Meaning | Do |
+|---|---|---|
+| `400` | The agent configuration or prompt is invalid | Fix the request; do not retry as-is |
+| `401` | Credential rejected | `albus status`, then re-authenticate |
+| `403` | Not provisioned for the alpha | Stop; the user emails carlo@albus.sh |
+| `409` | A run is already in flight for that session | Wait, or use a different session id |
+| `423` | The session is locked by a run | Same as `409` |
+| `429` | The organization's 20 runs are spent | Stop; the user emails carlo@albus.sh |
+| `502` | The run failed inside the harness | Read `albus sessions audit ID`; a new idempotency key reruns it |
+| `504` | The wait elapsed, the run continues | Re-send with the **same** idempotency key, or poll |
+
+## Rules that matter when you write Albus code
+
+- **The session id is the caller's.** The same id resumes the conversation; a new
+  id starts one. Do not generate a fresh id per turn.
+- **Pass an idempotency key** on anything unattended, derived from the work item
+  rather than the clock. The same key re-attaches to that invocation instead of
+  running again — which makes it right for a lost response or a `504`, and wrong
+  for rerunning a failed invocation. That needs a new key.
+- **One invocation per session at a time.** Concurrency lives across session ids,
+  not inside one.
+- **Credentials are never inlined.** Store them with `albus secrets create` and
+  reference them as `albus.sh/secrets/<name>`. Required for
+  `model.provider.credential`, correct for MCP headers. Values are resolved
+  server-side and never appear in responses or the audit log.
+- **`--agent-file` replaces the other agent flags** and cannot be combined with
+  them.
+
+## Examples
+
+### Run and resume a session
+
+<CodeGroup>
+
+```python Python
+import os
+from albus_sdk import Albus, models
+
+SESSION = "example-resume"
+AGENT = {"model": {"name": "gemini-3.6-flash"}}
+
+with Albus(
+    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+) as albus:
+    for prompt in ["Name three primary colors.", "Now sort them alphabetically."]:
+        response = albus.sessions.run_session(
+            id=SESSION,
+            user_prompt=prompt,
+            agent_name="example",
+            agent=AGENT,
+            wait=True,
+        )
+        print(response.result.messages[-1].content)
+```
+
+```typescript TypeScript
+import { Albus } from "@albus-ts/sdk";
+
+const albus = new Albus({
+  security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
+});
+
+const session = "example-resume";
+const agent = { model: { name: "gemini-3.6-flash" } };
+
+for (const userPrompt of [
+  "Name three primary colors.",
+  "Now sort them alphabetically.",
+]) {
+  const response = await albus.sessions.runSession({
+    id: session,
+    wait: true,
+    body: { userPrompt, agentName: "example", agent },
+  });
+  console.log(response.result.messages.at(-1)?.content);
+}
+```
+
+```bash CLI
+albus sessions run example-resume -p "Name three primary colors." \
+  --agent-name example --model gemini-3.6-flash
+albus sessions run example-resume -p "Now sort them alphabetically." \
+  --agent-name example --model gemini-3.6-flash
+```
+
+</CodeGroup>
+
+### Run unattended, retry safely
+
+The key is derived from the work item, not the clock, so a retry re-attaches
+instead of running twice. The wait is bounded, and a timeout means "still
+running".
+
+```python Python
+import os
+from albus_sdk import Albus, models, errors
+
+TICKET = "support-1234"
+
+with Albus(
+    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+) as albus:
+    for attempt in range(3):
+        try:
+            response = albus.sessions.run_session(
+                id=TICKET,
+                user_prompt="Summarize this ticket for the on-call engineer.",
+                agent_name="support-triage",
+                agent={"model": {"name": "gemini-3.6-flash"}},
+                idempotency_key=f"{TICKET}-summary-v1",
+                wait=True,
+                wait_timeout=120,
+            )
+            print(response.result.messages[-1].content)
+            break
+        except errors.AlbusError as error:
+            # 504: the run is still going — the same key re-attaches to it.
+            # 429: the alpha quota is spent; retrying will not help.
+            if error.status_code != 504:
+                raise
+    else:
+        print("still running after three waits")
+```
+
+### Give the agent GitHub tools
+
+```python Python
+import os
+from albus_sdk import Albus, models
+
+with Albus(
+    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+) as albus:
+    albus.secrets.create_secret(
+        name="integrations/github/token",
+        value=f"Bearer {os.environ['GITHUB_TOKEN']}",
+    )
+
+    response = albus.sessions.run_session(
+        id="repo-triage",
+        user_prompt="Find open issues mentioning login failures and summarize them.",
+        agent_name="repo-triage",
+        agent={
+            "model": {"name": "gemini-3.6-flash"},
+            "system_prompt": "You investigate GitHub issues. Cite issue numbers.",
+            "mcp_servers": [
+                {
+                    "name": "github",
+                    "url": "https://api.githubcopilot.com/mcp/",
+                    "headers": {
+                        "Authorization": "albus.sh/secrets/integrations/github/token"
+                    },
+                    "allowed_tools": ["search_issues", "get_issue"],
+                }
+            ],
+        },
+        wait=True,
+    )
+    print(response.result.messages[-1].content)
+```
+
+### Debug a run
+
+```bash
+albus sessions get support-1234
+albus sessions audit support-1234 --limit 50 | jq '.events[] | {type, agent_revision, event_time}'
+albus agents revision support-triage "$(albus sessions get support-1234 | jq -r '.session.agent_revision')"
+```
+
+The [audit log](/guides/audit-log) is what happened inside the run; `agents
+revision` is the exact configuration that ran it.
+
+### Fan out across sessions
+
+```python Python
+import asyncio, os
+from albus_sdk import AsyncAlbus, models
+
+TICKETS = ["support-1", "support-2", "support-3"]
+
+
+async def summarize(albus: AsyncAlbus, ticket: str) -> str:
+    response = await albus.sessions.run_session(
+        id=ticket,
+        user_prompt="Summarize this ticket.",
+        agent_name="support-triage",
+        agent={"model": {"name": "gemini-3.6-flash"}},
+        idempotency_key=f"{ticket}-summary-v1",
+        wait=True,
+        wait_timeout=300,
+    )
+    return response.result.messages[-1].content
+
+
+async def main() -> None:
+    async with AsyncAlbus(
+        security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    ) as albus:
+        for summary in await asyncio.gather(
+            *(summarize(albus, ticket) for ticket in TICKETS)
+        ):
+            print(summary)
+
+
+asyncio.run(main())
+```
+
+<Warning>
+Each run spends one of the organization's 20 alpha runs. Fan out deliberately.
+</Warning>
+
+## Where the rest of the documentation is
+
+Any page is markdown at the same URL with `.md` appended.
+
+| Need | Read |
+|---|---|
+| Full index, machine-readable | https://docs.albus.sh/llms.txt |
+| Whole corpus, one file | https://docs.albus.sh/llms-full.txt |
+| Running sessions in depth | https://docs.albus.sh/guides/run-a-session.md |
+| MCP servers and their secrets | https://docs.albus.sh/guides/mcp-servers.md |
+| Secrets | https://docs.albus.sh/guides/secrets.md |
+| Bringing your own model key | https://docs.albus.sh/guides/model-providers.md |
+| The audit log | https://docs.albus.sh/guides/audit-log.md |
+| Errors and fixes | https://docs.albus.sh/guides/troubleshooting.md |
+| CLI reference | https://docs.albus.sh/reference/cli.md |
+| SDK reference | https://docs.albus.sh/reference/sdks.md |
+| HTTP contract | https://docs.albus.sh/openapi/openapi.yaml |
+| What alpha cannot do | https://docs.albus.sh/alpha/limitations.md |
