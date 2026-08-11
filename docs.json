@@ -7,6 +7,13 @@
     "light": "#3B82F6",
     "dark": "#1D4ED8"
   },
+  "banner": {
+    "content": "Albus is in alpha: invite-only, 20 session runs per organization. [What that means](/alpha/limitations)",
+    "dismissible": true
+  },
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude"]
+  },
   "api": {
     "playground": {
       "display": "interactive"
@@ -20,20 +27,83 @@
     "groups": [
       {
         "group": "Getting started",
-        "pages": ["index", "getting-started/api", "getting-started/python"]
+        "pages": [
+          "index",
+          "getting-started/access",
+          "getting-started/install",
+          "getting-started/authenticate",
+          "getting-started/first-session",
+          "getting-started/for-your-agent"
+        ]
       },
       {
         "group": "Guides",
-        "pages": ["guides/agents", "guides/releases"]
+        "pages": [
+          "guides/run-a-session",
+          "guides/secrets",
+          "guides/mcp-servers",
+          "guides/model-providers",
+          "guides/agents-and-revisions",
+          "guides/audit-log",
+          "guides/troubleshooting"
+        ]
+      },
+      {
+        "group": "For coding agents",
+        "pages": ["agents/docs"]
+      },
+      {
+        "group": "Alpha",
+        "pages": ["alpha/limitations", "alpha/support"]
       },
       {
         "group": "Reference",
-        "pages": ["reference/overview"]
+        "pages": ["reference/cli", "reference/sdks", "reference/overview", "guides/releases"]
       },
       {
         "group": "API reference",
         "openapi": "openapi/openapi.yaml"
       }
     ]
-  }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:carlo@albus.sh"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Console",
+      "href": "https://albus.sh"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/albusgroup"
+    }
+  },
+  "redirects": [
+    {
+      "source": "/getting-started/api",
+      "destination": "/getting-started/authenticate"
+    },
+    {
+      "source": "/getting-started/python",
+      "destination": "/reference/sdks"
+    },
+    {
+      "source": "/guides/agents",
+      "destination": "/agents/docs"
+    },
+    {
+      "source": "/agents/setup",
+      "destination": "/agents/docs"
+    },
+    {
+      "source": "/agents/examples",
+      "destination": "/agents/docs"
+    }
+  ]
 }

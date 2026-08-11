@@ -1,0 +1,115 @@
+---
+title: CLI reference
+description: Every albus command, flag, and environment variable.
+---
+
+The CLI is a thin shell over the [Python SDK](/reference/sdks): each command that
+calls Albus maps to one API operation and prints the JSON response, so output
+pipes into `jq`.
+
+```bash
+albus sessions get my-session | jq '.messages[-1].content'
+```
+
+## Global options
+
+| Option | Meaning |
+|---|---|
+| `--base-url` | API base URL. Overrides `ALBUS_BASE_URL`; defaults to `https://albus.sh/api`. |
+| `--timeout` | Per-request timeout in seconds (default 30). A waiting `sessions run` long-polls and is exempt. |
+| `--version` | Print the CLI version. |
+| `--help` | Available on every command and subcommand. |
+
+## Environment
+
+| Variable | Read by | Meaning |
+|---|---|---|
+| `ALBUS_API_KEY` | CLI | Organization API key. Wins over a stored session. |
+| `ALBUS_BASE_URL` | CLI | Default API base URL. |
+| `ALBUS_CONFIG_DIR` | CLI | Where the browser session is stored. Falls back to `$XDG_CONFIG_HOME/albus`, then `~/.config/albus`. |
+| `ALBUS_API_KEY_AUTH` | SDKs | Organization API key. |
+| `ALBUS_BEARER_AUTH` | SDKs | User bearer token. |
+
+## Authentication
+
+```bash
+albus login                # browser sign-in
+albus login --no-browser   # print the URL for you to open, and wait
+albus logout
+albus whoami               # requires the browser session
+albus status               # what credential is in effect, and whether it works
+albus health
+albus --version
+```
+
+`albus status` prints JSON and exits 0 whether or not the credential works:
+`cli_version`, `base_url`, `credential` (`api_key`, `session`, or `none`),
+`authenticated`, plus `email` and `organizations` for a signed-in session and
+`error` for a credential Albus refused.
+
+## Sessions
+
+```bash
+albus sessions run SESSION_ID --prompt TEXT --agent-name NAME [options]
+albus sessions list
+albus sessions get SESSION_ID [--after CURSOR] [--limit N]
+albus sessions audit SESSION_ID [--after CURSOR] [--limit N]
+albus sessions delete SESSION_ID
+```
+
+`sessions run` options:
+
+| Option | Meaning |
+|---|---|
+| `--prompt`, `-p` | The user prompt. Required. |
+| `--agent-name` | Name identifying the agent. Required. |
+| `--model` | Model identifier. Required unless `--agent-file` is given. |
+| `--provider` / `--credential` | Your own provider and its secret reference. Must be given together. |
+| `--system-prompt` | System instructions. |
+| `--tool` | A built-in tool the model may call. Repeat to allow several. |
+| `--max-steps` | Cap on model steps. |
+| `--agent-file` | JSON file holding the whole agent configuration. Cannot be combined with the options above. |
+| `--idempotency-key` | Makes the run retry-safe. |
+| `--wait` / `--no-wait` | Block for the reply (default) or return once accepted. |
+| `--wait-timeout` | Seconds to block server-side. Omit to wait indefinitely. |
+
+See [Run a session](/guides/run-a-session).
+
+## Secrets
+
+```bash
+albus secrets list
+albus secrets create NAME [--value VALUE]   # omit --value to read stdin
+albus secrets get NAME                      # masked
+albus secrets update NAME [--value VALUE]
+albus secrets delete NAME
+```
+
+See [Secrets](/guides/secrets).
+
+## Agents
+
+```bash
+albus agents list
+albus agents get NAME
+albus agents revision NAME REVISION
+```
+
+See [Agents and revisions](/guides/agents-and-revisions).
+
+## API keys
+
+```bash
+albus tokens list
+albus tokens create NAME    # prints the only copy of the value
+albus tokens get ID
+albus tokens delete ID
+```
+
+`tokens` requires the browser session, since minting a key identifies you. See
+[Authenticate](/getting-started/authenticate).
+
+## Exit codes
+
+`0` on success. `1` on any failure, with a single-line `error: …` message on
+stderr naming the credential or field at fault — no traceback.

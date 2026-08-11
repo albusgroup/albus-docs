@@ -1,0 +1,163 @@
+---
+title: Run a session
+description: Everything a session run does — identity, history, waiting, idempotency, agent configuration, and failure modes.
+---
+
+One operation runs an agent: `POST /sessions/{id}` (see the [API
+reference](/reference/overview)), `albus sessions run` in the CLI,
+`sessions.run_session` in Python, `sessions.runSession` in TypeScript.
+Everything on this page is that one call.
+
+Each call is an **invocation**: one prompt, one agent run, one assistant reply.
+
+## Session identity is yours to choose
+
+You supply the session id. Albus creates the session on the first run and resumes
+it on every later one, so a session is created and continued by the same call.
+
+```bash
+albus sessions run support-1234 -p "customer says login fails" \
+  --agent-name support-triage --model gemini-3.6-flash
+albus sessions run support-1234 -p "what did they try already?" \
+  --agent-name support-triage --model gemini-3.6-flash
+```
+
+Ids match `^[0-9a-zA-Z._:-]+$`, 2–100 characters — use something meaningful from
+your own system (`support-1234`, `pr-987`, `nightly:2026-08-11`) so you can find
+the session again without storing a mapping.
+
+The response's `session.invocation_count` tells you how many runs the session has
+had, and `session.state` is `RUNNING`, `DONE`, `FAILED`, or `CANCELED`.
+
+<Note>
+A run loads up to the session's most recent 1000 messages as history. Beyond
+that, older turns fall out. There is no memory beyond a session — see [alpha
+limitations](/alpha/limitations).
+</Note>
+
+## Waiting for the reply
+
+A run is asynchronous underneath, with two ways to collect the result.
+
+**Wait (long-poll).** The request blocks until the assistant's reply exists and
+returns it in `messages`. This is the CLI default, and `wait=true` in the API.
+
+```bash
+albus sessions run support-1234 -p "summarize" \
+  --agent-name support-triage --model gemini-3.6-flash \
+  --wait-timeout 120
+```
+
+`--wait-timeout` (`wait_timeout`) bounds the wait server-side. If it elapses
+first the request fails with **`504`** and a JSON body — the run is still
+going, and retrying the same idempotency key re-attaches to it. Omit the timeout
+and the request waits as long as your client stays connected.
+
+**Don't wait.** Return as soon as the invocation is accepted, then poll.
+
+```bash
+albus sessions run support-1234 -p "summarize" \
+  --agent-name support-triage --model gemini-3.6-flash --no-wait
+albus sessions get support-1234
+```
+
+`sessions get` pages messages with `--after`/`--limit`; each message carries a
+monotonic `cursor`, so pass the last cursor you saw as `after` to fetch what is
+new.
+
+## Idempotency
+
+Supply an idempotency key and the run becomes retry-safe: a network failure,
+a `504`, or a lost response costs nothing.
+
+```bash
+albus sessions run support-1234 -p "summarize" \
+  --agent-name support-triage --model gemini-3.6-flash \
+  --idempotency-key "support-1234-summary-1"
+```
+
+| Situation | Result |
+|---|---|
+| Same key, identical body | Re-attaches to that invocation and returns its current state |
+| Same key, different body | **`409`** |
+| New key while another invocation is still running | **`423`** — a session runs one invocation at a time |
+| No key | A fresh, non-retry-safe invocation; the server generates a key |
+
+The effective key always comes back — in the `Idempotency-Key` response header,
+and in the CLI's JSON output as `idempotency_key` — so you can reference or
+retry the invocation even when you did not supply one.
+
+## Agent configuration
+
+The `agent` object defines behavior; `agent_name` names it. Every distinct
+configuration under one name becomes a **revision**, so you can tell which
+version of your agent produced a run. See [agents and
+revisions](/guides/agents-and-revisions).
+
+```json
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "system_prompt": "You triage support tickets. Be terse.",
+  "tools": ["WEB_SEARCH"],
+  "max_steps": 12,
+  "mcp_servers": [
+    {
+      "name": "github",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": { "Authorization": "albus.sh/secrets/github-mcp" },
+      "allowed_tools": ["search_issues"]
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `model.name` | Model identifier, e.g. `gemini-3.6-flash`. Required. |
+| `model.provider` | Your own provider and credential. Omit to use the model Albus provides — see [model providers](/guides/model-providers). |
+| `system_prompt` | System instructions. A server default applies when omitted. |
+| `tools` | Built-in tools the model may call. `WEB_SEARCH` is the only one in alpha; an unknown name is rejected up front. |
+| `max_steps` | Cap on model steps before the run stops. |
+| `mcp_servers` | [MCP servers](/guides/mcp-servers) whose tools are offered to the model. |
+
+In the CLI, the common fields have flags (`--model`, `--system-prompt`, `--tool`,
+`--max-steps`, `--provider`, `--credential`). Anything else — MCP servers, a
+provider URL override — goes in a JSON file:
+
+```bash
+albus sessions run support-1234 -p "triage this" \
+  --agent-name support-triage --agent-file agent.json
+```
+
+<Warning>
+`--agent-file` is the *whole* agent configuration and cannot be combined with
+`--model`, `--provider`, `--credential`, `--system-prompt`, `--tool`, or
+`--max-steps`. Put the model in the file instead.
+</Warning>
+
+## Failure modes
+
+Every one of these is a JSON body, not a bare status.
+
+| Status | Meaning | What to do |
+|---|---|---|
+| `400` | Invalid request — unknown tool, malformed MCP server, missing model | Fix the request; nothing ran |
+| `401` | Credential missing, expired, or wrong for this API | `albus login`, or check `ALBUS_API_KEY` and the base URL |
+| `403` `not_provisioned` | Account is not on the alpha roster | [Request access](/getting-started/access) |
+| `409` | Idempotency key reused with a different body | Use a new key, or resend the original body |
+| `423` | Another invocation is already running in this session | Wait for it, or retry the running invocation's key |
+| `429` | Organization hit its run quota | 20 runs in alpha — email [carlo@albus.sh](mailto:carlo@albus.sh) |
+| `502` | The run failed instead of replying | Body carries the failure kind and detail; check [the audit log](/guides/audit-log), then run again with a **new** idempotency key |
+| `504` | Timed out waiting for the reply | The run continues; retry the same idempotency key |
+
+Note the difference between the two retries: reusing a key **re-attaches** to
+that invocation, so reusing the key of a failed run returns its failure again.
+Use the same key to recover a lost response (`504`, dropped connection), and a
+new key to actually run again. Albus does not retry a failed run for you — see
+[alpha limitations](/alpha/limitations).
+
+## Clean up
+
+```bash
+albus sessions delete support-1234
+```

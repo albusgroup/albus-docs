@@ -3,8 +3,15 @@ title: API reference
 description: The authoritative HTTP API contract for the current Albus production release.
 ---
 
-The pages in this section are generated from the current production OpenAPI
-snapshot. They include request and response schemas and runnable examples.
+The API reference pages are generated from the current production OpenAPI
+snapshot: every operation with its request and response schemas, error bodies,
+and a runnable playground. It is the authority on request shapes — prefer it over
+inferring them from an example.
 
-For an agent or code generator, download the
-[OpenAPI document](/openapi/openapi.yaml) directly.
+Base URL: `https://albus.sh/api`. Both credentials are sent as
+`Authorization: Bearer <value>` — see [Authenticate](/getting-started/authenticate).
+
+For an agent or a code generator, download the [OpenAPI
+document](/openapi/openapi.yaml) directly. The [SDKs](/reference/sdks) and the
+[CLI](/reference/cli) are generated from that same snapshot, so an operation here
+exists in all of them under the same name.

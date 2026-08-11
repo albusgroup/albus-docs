@@ -1,0 +1,182 @@
+---
+title: Connect MCP servers
+description: Give an agent tools from Model Context Protocol servers, authenticated with Albus secrets.
+---
+
+Declare MCP servers in an agent configuration and Albus connects to them for the
+run, discovers their tools, offers them to the model, and dispatches the calls.
+Nothing is installed and nothing runs on your machine — the servers must be
+reachable over the internet from Albus.
+
+Requirements:
+
+- The server speaks **Streamable HTTP** at the URL you give (`stdio` servers
+  cannot be used; run them behind an HTTP endpoint if you need them).
+- Any credential is stored as an [Albus secret](/guides/secrets) and referenced,
+  not inlined.
+
+## Worked example: GitHub
+
+<Steps>
+  <Step title="Store the credential">
+    The value is the full header value the server expects, `Bearer` included.
+
+    ```bash
+    printf 'Bearer ghp_your_token' | albus secrets create integrations/github/token
+    ```
+  </Step>
+
+  <Step title="Declare the server in an agent file">
+    ```json agent.json
+    {
+      "model": { "name": "gemini-3.6-flash" },
+      "system_prompt": "You investigate GitHub issues. Cite issue numbers.",
+      "mcp_servers": [
+        {
+          "name": "github",
+          "url": "https://api.githubcopilot.com/mcp/",
+          "headers": {
+            "Authorization": "albus.sh/secrets/integrations/github/token"
+          },
+          "allowed_tools": ["search_issues", "get_issue"]
+        }
+      ]
+    }
+    ```
+  </Step>
+
+  <Step title="Run">
+    ```bash
+    albus sessions run repo-triage \
+      --prompt "Find open issues mentioning login failures and summarize them." \
+      --agent-name repo-triage \
+      --agent-file agent.json
+    ```
+  </Step>
+
+  <Step title="Check which tools it actually called">
+    ```bash
+    albus sessions audit repo-triage --limit 50
+    ```
+
+    `tool_call` events carry the arguments, the response, and the MCP server URL.
+  </Step>
+</Steps>
+
+## The fields
+
+| Field | Meaning |
+|---|---|
+| `name` | Your alias for the server. It **prefixes the tool names** the model sees: `github` turns `search_issues` into `github__search_issues`. Must be unique in the configuration. |
+| `url` | The server's Streamable HTTP endpoint. |
+| `headers` | Headers sent to the server. A value in [secret-reference](/guides/secrets) form (`albus.sh/secrets/<name>`) is resolved server-side; any other value is sent literally. |
+| `allowed_tools` | The server's tools the model may call. **Omit to allow all of them.** |
+
+`allowed_tools` uses the server's own tool names (`search_issues`), not the
+prefixed names the model sees (`github__search_issues`).
+
+## Multiple servers
+
+Add as many as the agent needs; each gets its own alias, credential, and
+allowlist.
+
+```json
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "mcp_servers": [
+    {
+      "name": "github",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": { "Authorization": "albus.sh/secrets/integrations/github/token" },
+      "allowed_tools": ["search_issues"]
+    },
+    {
+      "name": "docs",
+      "url": "https://mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "albus.sh/secrets/integrations/docs/token",
+        "X-Api-Version": "2026-01-01"
+      }
+    }
+  ]
+}
+```
+
+## From the SDKs
+
+MCP servers are part of the agent configuration, so they need no special
+handling.
+
+<CodeGroup>
+
+```python Python
+import os
+from albus_sdk import Albus, models
+
+with Albus(
+    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+) as albus:
+    response = albus.sessions.run_session(
+        id="repo-triage",
+        user_prompt="Find open issues mentioning login failures.",
+        agent_name="repo-triage",
+        agent={
+            "model": {"name": "gemini-3.6-flash"},
+            "mcp_servers": [
+                {
+                    "name": "github",
+                    "url": "https://api.githubcopilot.com/mcp/",
+                    "headers": {
+                        "Authorization": "albus.sh/secrets/integrations/github/token"
+                    },
+                    "allowed_tools": ["search_issues"],
+                }
+            ],
+        },
+        wait=True,
+    )
+```
+
+```typescript TypeScript
+import { Albus } from "@albus-ts/sdk";
+
+const albus = new Albus({
+  security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
+});
+
+const response = await albus.sessions.runSession({
+  id: "repo-triage",
+  wait: true,
+  body: {
+    userPrompt: "Find open issues mentioning login failures.",
+    agentName: "repo-triage",
+    agent: {
+      model: { name: "gemini-3.6-flash" },
+      mcpServers: [
+        {
+          name: "github",
+          url: "https://api.githubcopilot.com/mcp/",
+          headers: {
+            Authorization: "albus.sh/secrets/integrations/github/token",
+          },
+          allowedTools: ["search_issues"],
+        },
+      ],
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+## When something goes wrong
+
+| Symptom | Cause |
+|---|---|
+| `400` before the run starts | Malformed server declaration (missing `name` or `url`), or a header reference naming a secret that does not exist |
+| The model never calls the tool | It is not in `allowed_tools`, or the prompt gives it no reason to |
+| The server rejects the calls | The header value is wrong — check it includes the scheme (`Bearer …`) the server expects; `albus secrets get <name>` shows the last three characters |
+| `502` mid-run | The run failed; `albus sessions audit <session>` shows the last `tool_call` and the failure |
+
+Header references are resolved for every run, so rotating the secret takes effect
+on the next run with no configuration change.

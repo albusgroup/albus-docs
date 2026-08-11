@@ -1,0 +1,40 @@
+---
+title: Get access
+description: How to join the Albus alpha.
+---
+
+The alpha is invitation-only. An account is provisioned per Google address and
+belongs to one organization, which owns its sessions, secrets, and API keys.
+
+## Request an invitation
+
+Email [carlo@albus.sh](mailto:carlo@albus.sh) with the Google address you will
+sign in with. You are told when the account is provisioned.
+
+## Confirm you have access
+
+Sign in to the console at [albus.sh/login](https://albus.sh/login), or from the
+CLI:
+
+```bash
+albus login
+albus whoami
+```
+
+`whoami` prints your account and the organizations it belongs to.
+
+## If you are not provisioned yet
+
+Every API call from an account that is not on the roster fails with `403` and
+the code `not_provisioned`:
+
+```json
+{ "code": "not_provisioned", "message": "..." }
+```
+
+The CLI reports it as *"this account is not in the Albus beta. Email
+carlo@albus.sh to request access."* and the console shows a "not in beta"
+screen. Nothing else about your setup is wrong — the account simply is not on
+the roster yet.
+
+Next: [install the CLI](/getting-started/install).

@@ -1,0 +1,59 @@
+---
+title: Audit log
+description: See what happened inside a run — model calls, tool calls, and outcomes.
+---
+
+`sessions get` returns the conversation. The audit log returns the run: an
+immutable, time-ordered record of the model calls, the tool calls and their
+output, and how the run ended. It is the debugging surface in alpha — there are
+no traces or dashboards yet.
+
+```bash
+albus sessions audit support-1234 --limit 50
+albus sessions audit support-1234 --after "$cursor"
+```
+
+Page with `--after`/`--limit`; pass the response's `next_cursor` as the next
+`after`.
+
+## Event types
+
+| `type` | What it records |
+|---|---|
+| `agent_invocation` | The request that started the run |
+| `model_call` | A model call and the tool calls it requested |
+| `tool_call` | An executed tool call — arguments, response, and MCP server URL |
+| `run_succeeded` | The run produced its reply |
+| `run_failed` | The run failed, with the failure kind and detail |
+| `harness_exit` | The execution environment exited |
+
+`llm_call` and `tool_result` are the earlier names for `model_call` and
+`tool_call`; events recorded before the rename still carry them, so handle both.
+
+Every event carries `session_id`, the `idempotency_key` of the run it belongs to,
+the `agent_revision` that ran, `event_time`, and a `payload` whose shape depends
+on `type`.
+
+<Note>
+Model and tool output is stored up to 32 KiB per value. Alongside it the event
+carries the complete value's byte count, SHA-256 digest, and a truncation flag
+(`contentBytes`, `contentSha256`, `contentTruncated`), so you can tell a short
+answer from a truncated one. Payload keys are camelCase (`mcpServerUrl`,
+`toolCalls`).
+</Note>
+
+## What it answers
+
+```bash
+# Why did this run fail?
+albus sessions audit support-1234 | jq '.events[] | select(.type=="run_failed")'
+
+# Which tools did the agent actually call, and with what?
+albus sessions audit support-1234 | jq '.events[] | select(.type=="tool_call") | {tool: .payload.name, args: .payload.args, server: .payload.mcpServerUrl}'
+
+# Which revision produced this run?
+albus sessions audit support-1234 | jq -r '.events[0].agent_revision'
+```
+
+Filtering by run is a client-side filter on `idempotency_key` — the log is
+per-session, and the key is what identifies one invocation within it.
