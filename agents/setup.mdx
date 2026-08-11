@@ -42,7 +42,10 @@ albus status
 ```
 
 `credential` is `api_key` when `ALBUS_API_KEY` is set, `session` when the user is
-signed in, `none` otherwise. If `authenticated` is already `true`, skip to step 4.
+signed in, `none` otherwise. A signed-in session also reports `email` and
+`organizations`; a credential Albus refused reports `error`. The command exits 0
+either way — read the JSON, not the exit code. If `authenticated` is already
+`true`, skip to step 4.
 
 ## 3. Authenticate
 
@@ -57,6 +60,11 @@ The command prints the authorization URL on its own line and then blocks until
 the user finishes, for up to 180 seconds. Show the URL to the user verbatim and
 ask them to open it. Do not open a browser on their behalf, and do not paste
 their credentials anywhere.
+
+The sign-in redirects to `127.0.0.1:8484-8487` on the machine running the CLI. If
+that is not the machine the user's browser is on, tell them to forward the ports
+(`ssh -L 8484:localhost:8484 …`) or to sign in on their own machine and set
+`ALBUS_API_KEY` here instead.
 
 If the user already has an organization API key, that works instead and needs no
 browser:

@@ -28,16 +28,20 @@ redirect, and stores the session in `$ALBUS_CONFIG_DIR/credentials.json`, else
 `$XDG_CONFIG_HOME/albus/credentials.json`, else `~/.config/albus/`. It renews
 itself as it expires.
 
-On a machine with no browser — a container, a remote box, CI — use
-`--no-browser`, which prints the authorization URL and waits for you to open it
-elsewhere:
+When nothing should open a browser for you — a coding agent running the command,
+or a shell where your browser is not the one Albus would launch — use
+`--no-browser`. It prints the authorization URL and waits for you to open it:
 
 ```bash
 albus login --no-browser
 ```
 
-This is also how a coding agent signs you in: it prints the URL, you click it.
-See [Set up from a coding agent](/agents/setup).
+The redirect comes back to `127.0.0.1` on the machine running the CLI, so open
+the URL in a browser on that machine. From a remote host, forward the ports
+first (`ssh -L 8484:localhost:8484 …`).
+
+This is how a coding agent signs you in: it prints the URL, you click it. See
+[Set up from a coding agent](/agents/setup).
 
 ## Create an API key
 

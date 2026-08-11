@@ -34,12 +34,18 @@ albus sessions get my-session | jq '.messages[-1].content'
 
 ```bash
 albus login                # browser sign-in
-albus login --no-browser   # print the URL and wait; for headless hosts and agents
+albus login --no-browser   # print the URL for you to open, and wait
 albus logout
 albus whoami               # requires the browser session
 albus status               # what credential is in effect, and whether it works
 albus health
+albus --version
 ```
+
+`albus status` prints JSON and exits 0 whether or not the credential works:
+`cli_version`, `base_url`, `credential` (`api_key`, `session`, or `none`),
+`authenticated`, plus `email` and `organizations` for a signed-in session and
+`error` for a credential Albus refused.
 
 ## Sessions
 
