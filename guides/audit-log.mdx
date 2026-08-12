@@ -3,18 +3,19 @@ title: Audit log
 description: See what happened inside a run — model calls, tool calls, and outcomes.
 ---
 
-`sessions get` returns the conversation. The audit log returns the run: an
-immutable, time-ordered record of the model calls, the tool calls and their
-output, and how the run ended. It is the debugging surface in alpha — there are
-no traces or dashboards yet.
+Find out what happened inside a run. `sessions get` returns the conversation; the
+audit log returns the run itself — an immutable, time-ordered record of the model
+calls, the tool calls and their output, and how the run ended. It is the
+debugging surface in the private beta: there are no traces or dashboards yet.
 
 ```bash
 albus sessions audit support-1234 --limit 50
 albus sessions audit support-1234 --after "$cursor"
 ```
 
-Page with `--after`/`--limit`; pass the response's `next_cursor` as the next
-`after`.
+Both commands print JSON on stdout. Page with `--after`/`--limit` (default limit
+100); pass the response's `next_cursor` as the next `after`. `next_cursor` is
+omitted when there are no more events, and an invalid cursor returns `400`.
 
 ## Event types
 
@@ -35,8 +36,9 @@ the `agent_revision` that ran, `event_time`, and a `payload` whose shape depends
 on `type`.
 
 <Note>
-Model and tool output is stored up to 32 KiB per value. Alongside it the event
-carries the complete value's byte count, SHA-256 digest, and a truncation flag
+Model output, tool output, and tool arguments are stored up to 32 KiB each.
+Alongside each value the event carries the complete value's byte count, SHA-256
+digest, and a truncation flag
 (`contentBytes`, `contentSha256`, `contentTruncated`), so you can tell a short
 answer from a truncated one. Payload keys are camelCase (`mcpServerUrl`,
 `toolCalls`).

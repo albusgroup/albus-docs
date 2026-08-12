@@ -3,8 +3,8 @@ title: Authenticate
 description: Sign in with a browser, or authenticate with an organization API key.
 ---
 
-Albus accepts two credentials, and both are sent as
-`Authorization: Bearer <value>`:
+Authenticate a client against Albus. Albus accepts two credentials, and both are
+sent as `Authorization: Bearer <value>`:
 
 | Credential | Who it identifies | Where it comes from |
 |---|---|---|
@@ -36,9 +36,14 @@ or a shell where your browser is not the one Albus would launch — use
 albus login --no-browser
 ```
 
-The redirect comes back to `127.0.0.1` on the machine running the CLI, so open
-the URL in a browser on that machine. From a remote host, forward the ports
-first (`ssh -L 8484:localhost:8484 …`).
+The redirect comes back to `127.0.0.1:8484-8487` on the machine running the CLI,
+so open the URL in a browser on that machine. From a remote host, forward those
+four ports from your own machine first:
+
+```bash
+ssh -L 8484:localhost:8484 -L 8485:localhost:8485 \
+    -L 8486:localhost:8486 -L 8487:localhost:8487 user@remote-host
+```
 
 This is how a coding agent signs you in: it prints the URL, you click it. See
 [Albus for coding agents](/agents/docs).
@@ -55,12 +60,15 @@ albus tokens create ci
 
 ```json
 {
-  "id": "…",
+  "id": "9pv2rk3n",
   "name": "ci",
-  "token": "alb-…",
-  "created_at": "…"
+  "token": "alb-9pv2rk3n-1f4c8a6b2d9e7c50a3b81df6",
+  "created_at": "2026-02-10T18:03:44Z"
 }
 ```
+
+The token value has the form `alb-<id>-<secret>`. `id` is its first segment, and
+is what `albus tokens get` and `albus tokens delete` take.
 
 <Warning>
 The `token` value is returned **once**, at creation. `albus tokens list` and
@@ -77,7 +85,7 @@ The console shows the same thing at
 <CodeGroup>
 
 ```bash CLI
-export ALBUS_API_KEY="alb-…"
+export ALBUS_API_KEY="alb-9pv2rk3n-1f4c8a6b2d9e7c50a3b81df6"
 albus sessions list
 ```
 

@@ -16,12 +16,12 @@ returns the assistant's reply.
 You are probably reading this to set Albus up for the user of this machine, or to
 write code against it. Both are below, in order. Do not skip verification.
 
-## Alpha limits
+## Private-beta limits
 
 Read these before designing anything.
 
-- **20 session runs per organization**, ever, in the alpha. `429` means the cap
-  is spent. Never retry a run in a loop.
+- **20 session runs per organization**, ever, in the private beta. `429` means the
+  cap is spent. Never retry a run in a loop.
 - **Access is by invitation.** A `403` naming `not_provisioned` means the account
   is not enabled: stop and tell the user to email carlo@albus.sh with the Google
   address they sign in with.
@@ -31,7 +31,7 @@ Read these before designing anything.
   and no traces, metrics, or alerting — the per-session
   [audit log](/guides/audit-log) is the observability that exists.
 
-Full detail: [alpha limitations](/alpha/limitations).
+Full detail: [private-beta limitations](/beta/limitations).
 
 ## Setup
 
@@ -55,7 +55,7 @@ albus status
 
 ```json
 {
-  "cli_version": "0.2.0",
+  "cli_version": "0.1.0",
   "base_url": "https://albus.sh/api",
   "credential": "none",
   "authenticated": false
@@ -83,14 +83,19 @@ it. Do not open a browser on their behalf, and do not paste their credentials
 anywhere.
 
 The sign-in redirects to `127.0.0.1:8484-8487` on the machine running the CLI. If
-that is not the machine the user's browser is on, tell them to forward those
-ports (`ssh -L 8484:localhost:8484 …`), or to sign in on their own machine and
-set `ALBUS_API_KEY` here instead.
-
-An organization API key works instead and needs no browser:
+that is not the machine the user's browser is on, tell them to forward those four
+ports from their own machine:
 
 ```bash
-export ALBUS_API_KEY="alb-…"
+ssh -L 8484:localhost:8484 -L 8485:localhost:8485 \
+    -L 8486:localhost:8486 -L 8487:localhost:8487 user@this-host
+```
+
+Or have them sign in on their own machine and set `ALBUS_API_KEY` here instead.
+An organization API key needs no browser:
+
+```bash
+export ALBUS_API_KEY="alb-9pv2rk3n-1f4c8a6b2d9e7c50a3b81df6"
 ```
 
 ### 4. Verify
@@ -106,7 +111,7 @@ user to email carlo@albus.sh.
 ### 5. Run one session
 
 Do this once, to prove the setup end to end. It spends one of the organization's
-20 alpha runs, so run it once and do not loop.
+20 private-beta runs, so run it once and do not loop.
 
 ```bash
 albus sessions run setup-check \
@@ -134,8 +139,9 @@ albus tokens create local-dev
 The `token` field is shown once. Have the user store it, then:
 
 ```bash
-export ALBUS_API_KEY="alb-…"          # the CLI reads this
-export ALBUS_API_KEY_AUTH="alb-…"     # the SDKs read this
+# The CLI and the SDKs read different variables; the value is the same key.
+export ALBUS_API_KEY="alb-9pv2rk3n-1f4c8a6b2d9e7c50a3b81df6"
+export ALBUS_API_KEY_AUTH="alb-9pv2rk3n-1f4c8a6b2d9e7c50a3b81df6"
 ```
 
 Never write the key into a source file, a committed config, or a shell profile
@@ -165,15 +171,17 @@ Base URL `https://albus.sh/api`. Authenticate with `Authorization: Bearer <key>`
 ### Running a session
 
 ```http
-POST /sessions/{id}?wait=true&wait_timeout=120
-Idempotency-Key: <your key>
+POST /sessions/support-1234?wait_timeout_seconds=120
+Authorization: Bearer <key>
+Content-Type: application/json
+Idempotency-Key: support-1234-summary-v1
 
 {
-  "user_prompt": "…",
+  "user_prompt": "Summarize this ticket for the on-call engineer.",
   "agent_name": "support-triage",
   "agent": {
     "model": { "name": "gemini-3.6-flash" },
-    "system_prompt": "…",
+    "system_prompt": "You triage support tickets. Be terse.",
     "tools": ["WEB_SEARCH"],
     "max_steps": 12,
     "mcp_servers": [
@@ -188,11 +196,14 @@ Idempotency-Key: <your key>
 }
 ```
 
-- `wait=true` (the default in the CLI and SDKs) blocks until the assistant
-  replies and returns the session with its messages. `wait=false` returns as soon
-  as the run is accepted; poll `GET /sessions/{id}`.
-- `wait_timeout` bounds the wait server-side. Exceeding it is `504`, and the run
-  is still going.
+- `wait_timeout_seconds=<n>` blocks up to `n` seconds until the assistant replies
+  and returns the session with its messages. `wait_timeout_seconds=0` waits
+  without a bound. Omit the parameter to return as soon as the run is accepted,
+  then poll `GET /sessions/{id}` until `session.state` leaves `RUNNING`.
+- Exceeding the wait is `504`, and the run is still going.
+- The CLI spells the same thing as `--wait`/`--no-wait` and `--wait-timeout`:
+  `--wait` (the default) with no `--wait-timeout` sends `0`, and `--no-wait` omits
+  the parameter.
 - Omitting `agent.model.provider` uses the model credential Albus supplies, which
   is what a first run should do. To bring your own, store it as a secret and
   reference it — see [model providers](/guides/model-providers).
@@ -207,9 +218,10 @@ Idempotency-Key: <your key>
 |---|---|---|
 | `400` | The agent configuration or prompt is invalid | Fix the request; do not retry as-is |
 | `401` | Credential rejected | `albus status`, then re-authenticate |
-| `403` | Not provisioned for the alpha | Stop; the user emails carlo@albus.sh |
-| `409` | A run is already in flight for that session | Wait, or use a different session id |
-| `423` | The session is locked by a run | Same as `409` |
+| `403` | Not provisioned for the private beta | Stop; the user emails carlo@albus.sh |
+| `404` | No such session, secret, agent, revision, or token | Check the identifier |
+| `409` | The idempotency key was reused with a different body | Use a new key, or resend the original body |
+| `423` | Another invocation is running in that session | Wait, re-send the running key to attach, or use a different session id |
 | `429` | The organization's 20 runs are spent | Stop; the user emails carlo@albus.sh |
 | `502` | The run failed inside the harness | Read `albus sessions audit ID`; a new idempotency key reruns it |
 | `504` | The wait elapsed, the run continues | Re-send with the **same** idempotency key, or poll |
@@ -239,6 +251,7 @@ Idempotency-Key: <your key>
 
 ```python Python
 import os
+
 from albus_sdk import Albus, models
 
 SESSION = "example-resume"
@@ -253,7 +266,7 @@ with Albus(
             user_prompt=prompt,
             agent_name="example",
             agent=AGENT,
-            wait=True,
+            wait_timeout_seconds=300,
         )
         print(response.result.messages[-1].content)
 ```
@@ -268,16 +281,24 @@ const albus = new Albus({
 const session = "example-resume";
 const agent = { model: { name: "gemini-3.6-flash" } };
 
+// @albus-ts/sdk 0.4.0 cannot send wait_timeout_seconds yet, so start the run
+// and poll until it finishes.
 for (const userPrompt of [
   "Name three primary colors.",
   "Now sort them alphabetically.",
 ]) {
-  const response = await albus.sessions.runSession({
+  await albus.sessions.runSession({
     id: session,
-    wait: true,
     body: { userPrompt, agentName: "example", agent },
   });
-  console.log(response.result.messages.at(-1)?.content);
+
+  let current = await albus.sessions.getSession({ id: session });
+  while (current.session.state === "RUNNING") {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    current = await albus.sessions.getSession({ id: session });
+  }
+
+  console.log(current.messages.at(-1)?.content);
 }
 ```
 
@@ -298,7 +319,8 @@ running".
 
 ```python Python
 import os
-from albus_sdk import Albus, models, errors
+
+from albus_sdk import Albus, errors, models
 
 TICKET = "support-1234"
 
@@ -313,14 +335,13 @@ with Albus(
                 agent_name="support-triage",
                 agent={"model": {"name": "gemini-3.6-flash"}},
                 idempotency_key=f"{TICKET}-summary-v1",
-                wait=True,
-                wait_timeout=120,
+                wait_timeout_seconds=120,
             )
             print(response.result.messages[-1].content)
             break
         except errors.AlbusError as error:
             # 504: the run is still going — the same key re-attaches to it.
-            # 429: the alpha quota is spent; retrying will not help.
+            # 429: the private-beta quota is spent; retrying will not help.
             if error.status_code != 504:
                 raise
     else:
@@ -331,6 +352,7 @@ with Albus(
 
 ```python Python
 import os
+
 from albus_sdk import Albus, models
 
 with Albus(
@@ -359,7 +381,7 @@ with Albus(
                 }
             ],
         },
-        wait=True,
+        wait_timeout_seconds=300,
     )
     print(response.result.messages[-1].content)
 ```
@@ -378,7 +400,9 @@ revision` is the exact configuration that ran it.
 ### Fan out across sessions
 
 ```python Python
-import asyncio, os
+import asyncio
+import os
+
 from albus_sdk import AsyncAlbus, models
 
 TICKETS = ["support-1", "support-2", "support-3"]
@@ -391,8 +415,7 @@ async def summarize(albus: AsyncAlbus, ticket: str) -> str:
         agent_name="support-triage",
         agent={"model": {"name": "gemini-3.6-flash"}},
         idempotency_key=f"{ticket}-summary-v1",
-        wait=True,
-        wait_timeout=300,
+        wait_timeout_seconds=300,
     )
     return response.result.messages[-1].content
 
@@ -411,7 +434,8 @@ asyncio.run(main())
 ```
 
 <Warning>
-Each run spends one of the organization's 20 alpha runs. Fan out deliberately.
+Each run spends one of the organization's 20 private-beta runs. Fan out
+deliberately.
 </Warning>
 
 ## Where the rest of the documentation is
@@ -428,7 +452,8 @@ Any page is markdown at the same URL with `.md` appended.
 | Bringing your own model key | https://docs.albus.sh/guides/model-providers.md |
 | The audit log | https://docs.albus.sh/guides/audit-log.md |
 | Errors and fixes | https://docs.albus.sh/guides/troubleshooting.md |
+| Status codes and bodies | https://docs.albus.sh/reference/errors.md |
 | CLI reference | https://docs.albus.sh/reference/cli.md |
 | SDK reference | https://docs.albus.sh/reference/sdks.md |
 | HTTP contract | https://docs.albus.sh/openapi/openapi.yaml |
-| What alpha cannot do | https://docs.albus.sh/alpha/limitations.md |
+| What the private beta cannot do | https://docs.albus.sh/beta/limitations.md |

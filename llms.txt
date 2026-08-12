@@ -1,0 +1,54 @@
+# Albus
+
+> Albus runs agent sessions over an HTTP API. You send a prompt and an agent
+> configuration; Albus executes the model loop, connects the MCP servers you
+> declare, and returns the assistant's reply. Private beta: invite-only, 20
+> session runs per organization.
+
+## Agent Instructions
+
+If you are a coding agent setting Albus up or writing code against it, read
+https://docs.albus.sh/agents/docs.md first — it is self-contained: setup, the
+whole API surface, the rules, and runnable examples. Every page below is also
+available as Markdown at the same URL with `.md` appended.
+
+## Start here
+
+- [Albus for coding agents](https://docs.albus.sh/agents/docs.md): One page — setup, the whole API surface, the rules, and runnable examples.
+- [Introduction](https://docs.albus.sh/index.md): What Albus does and the shortest path to a first session.
+- [Request access](https://docs.albus.sh/getting-started/access.md): Get an account enabled for the private beta.
+- [Install](https://docs.albus.sh/getting-started/install.md): Install the CLI or an SDK, and the runtimes each needs.
+- [Authenticate](https://docs.albus.sh/getting-started/authenticate.md): Sign in, or mint an organization API key for scripts and CI.
+- [Run your first session](https://docs.albus.sh/getting-started/first-session.md): Run one session with the CLI, Python, TypeScript, or curl.
+- [Set up your coding agent](https://docs.albus.sh/getting-started/for-your-agent.md): Have a coding agent install Albus and write your integration.
+
+## Guides
+
+- [Run a session](https://docs.albus.sh/guides/run-a-session.md): Run a turn, wait for the reply, resume the conversation, and retry safely.
+- [Secrets](https://docs.albus.sh/guides/secrets.md): Store a credential and reference it from an agent configuration.
+- [MCP servers](https://docs.albus.sh/guides/mcp-servers.md): Give an agent tools by declaring MCP servers.
+- [Model providers](https://docs.albus.sh/guides/model-providers.md): Run a session on your own model provider account.
+- [Agents and revisions](https://docs.albus.sh/guides/agents-and-revisions.md): Trace a run back to the exact agent configuration that produced it.
+- [Audit log](https://docs.albus.sh/guides/audit-log.md): Find out what happened inside a run.
+- [Troubleshooting](https://docs.albus.sh/guides/troubleshooting.md): Match an error to its cause and its fix.
+
+## Reference
+
+- [CLI](https://docs.albus.sh/reference/cli.md): Every `albus` command, flag, and environment variable.
+- [SDKs](https://docs.albus.sh/reference/sdks.md): The Python and TypeScript clients — install, auth, responses, errors.
+- [Errors](https://docs.albus.sh/reference/errors.md): Every status code, its body, and the fix.
+- [API reference](https://docs.albus.sh/reference/overview.md): The generated HTTP contract and playground.
+- [Release policy](https://docs.albus.sh/guides/releases.md): How the docs track deployed releases.
+
+## Private beta
+
+- [Limitations](https://docs.albus.sh/beta/limitations.md): Quota, memory, execution, and observability limits.
+- [Support](https://docs.albus.sh/beta/support.md): How to reach us, and what to include.
+
+## OpenAPI Specs
+
+- [openapi](https://docs.albus.sh/openapi/openapi.yaml)
+
+## Whole corpus
+
+- [llms-full.txt](https://docs.albus.sh/llms-full.txt): Every page above, concatenated.

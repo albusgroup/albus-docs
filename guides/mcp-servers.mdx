@@ -3,10 +3,10 @@ title: Connect MCP servers
 description: Give an agent tools from Model Context Protocol servers, authenticated with Albus secrets.
 ---
 
-Declare MCP servers in an agent configuration and Albus connects to them for the
-run, discovers their tools, offers them to the model, and dispatches the calls.
-Nothing is installed and nothing runs on your machine — the servers must be
-reachable over the internet from Albus.
+Give an agent tools by declaring MCP servers in its configuration. Albus connects
+to them for the run, discovers their tools, offers them to the model, and
+dispatches the calls. Nothing is installed and nothing runs on your machine — the
+servers must be reachable over the internet from Albus.
 
 Requirements:
 
@@ -22,7 +22,7 @@ Requirements:
     The value is the full header value the server expects, `Bearer` included.
 
     ```bash
-    printf 'Bearer ghp_your_token' | albus secrets create integrations/github/token
+    printf 'Bearer %s' "$GITHUB_TOKEN" | albus secrets create integrations/github/token
     ```
   </Step>
 
@@ -67,8 +67,8 @@ Requirements:
 
 | Field | Meaning |
 |---|---|
-| `name` | Your alias for the server. It **prefixes the tool names** the model sees: `github` turns `search_issues` into `github__search_issues`. Must be unique in the configuration. |
-| `url` | The server's Streamable HTTP endpoint. |
+| `name` | Your alias for the server. It **prefixes the tool names** the model sees: `github` turns `search_issues` into `github__search_issues`. Must be unique in the configuration, non-empty, and must not contain `__`. |
+| `url` | The server's Streamable HTTP endpoint. Must be an absolute `http` or `https` URL. |
 | `headers` | Headers sent to the server. A value in [secret-reference](/guides/secrets) form (`albus.sh/secrets/<name>`) is resolved server-side; any other value is sent literally. |
 | `allowed_tools` | The server's tools the model may call. **Omit to allow all of them.** |
 
@@ -111,6 +111,7 @@ handling.
 
 ```python Python
 import os
+
 from albus_sdk import Albus, models
 
 with Albus(
@@ -133,8 +134,11 @@ with Albus(
                 }
             ],
         },
-        wait=True,
+        wait_timeout_seconds=300,
     )
+
+    for message in response.result.messages:
+        print(f"{message.role}: {message.content}")
 ```
 
 ```typescript TypeScript
@@ -144,9 +148,8 @@ const albus = new Albus({
   security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
 });
 
-const response = await albus.sessions.runSession({
+await albus.sessions.runSession({
   id: "repo-triage",
-  wait: true,
   body: {
     userPrompt: "Find open issues mentioning login failures.",
     agentName: "repo-triage",
@@ -165,6 +168,15 @@ const response = await albus.sessions.runSession({
     },
   },
 });
+
+// The TypeScript SDK cannot long-poll yet (see /reference/sdks), so poll.
+let session = await albus.sessions.getSession({ id: "repo-triage" });
+while (session.session.state === "RUNNING") {
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  session = await albus.sessions.getSession({ id: "repo-triage" });
+}
+
+console.log(session.messages.at(-1)?.content);
 ```
 
 </CodeGroup>
@@ -173,9 +185,10 @@ const response = await albus.sessions.runSession({
 
 | Symptom | Cause |
 |---|---|
-| `400` before the run starts | Malformed server declaration (missing `name` or `url`), or a header reference naming a secret that does not exist |
+| `400` before the run starts | Malformed server declaration: missing, duplicated, or `__`-containing `name`, or a `url` that is not an absolute http(s) URL |
+| The invocation fails at launch | A header reference names a secret that does not exist — references are resolved when the run starts, not when the request is validated |
 | The model never calls the tool | It is not in `allowed_tools`, or the prompt gives it no reason to |
-| The server rejects the calls | The header value is wrong — check it includes the scheme (`Bearer …`) the server expects; `albus secrets get <name>` shows the last three characters |
+| The server rejects the calls | The header value is wrong — check it includes the scheme (for example `Bearer <token>`) the server expects; `albus secrets get <name>` shows the last three characters |
 | `502` mid-run | The run failed; `albus sessions audit <session>` shows the last `tool_call` and the failure |
 
 Header references are resolved for every run, so rotating the secret takes effect

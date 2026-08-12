@@ -1,17 +1,20 @@
 ---
-title: Alpha limitations
-description: What Albus does not do yet, and what arrives in beta.
+title: Private beta limitations
+description: What Albus does not do yet, and what to design around.
 ---
 
-Albus is in alpha. Everything below is deliberate scope, not a defect — read it
-before you build on the platform, because each item changes what you should ask
-an agent to do.
+Read this before designing anything against Albus. Everything below is
+deliberate scope in the private beta, not a defect, and each item changes what
+you should ask an agent to do.
 
 ## Quota: 20 session runs per organization
 
 Every invocation counts, across every session, for the lifetime of the
-organization. Once the cap is reached, a run returns `429` with
-`ErrQuotaExceeded` and nothing executes.
+organization. Once the cap is reached, a run returns `429` and nothing executes:
+
+```json
+{ "message": "organization invocation quota exceeded" }
+```
 
 Email [carlo@albus.sh](mailto:carlo@albus.sh) to have the cap raised. Do not
 retry a `429` in a loop; it will not clear on its own.
@@ -48,9 +51,9 @@ and their output, and run outcomes — and that is the whole of it. There are no
 traces, no metrics, no dashboards, no alerting, and no cross-session search. Log
 what you need on your side, keyed by session id and idempotency key.
 
-## Coming in beta
+## Roadmap
 
 Agent memory, code execution, richer agent observability, and durable execution
-are all beta work, along with a higher run cap. Tell
+are all post-beta work, along with a higher run cap. Tell
 [carlo@albus.sh](mailto:carlo@albus.sh) which one blocks you — that is what
 orders the list.

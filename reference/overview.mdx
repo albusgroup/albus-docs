@@ -3,10 +3,18 @@ title: API reference
 description: The authoritative HTTP API contract for the current Albus production release.
 ---
 
-The API reference pages are generated from the current production OpenAPI
-snapshot: every operation with its request and response schemas, error bodies,
-and a runnable playground. It is the authority on request shapes — prefer it over
-inferring them from an example.
+Look up an operation's exact request and response shape. The API reference pages
+are generated from the OpenAPI snapshot published with the current production
+release: every operation with its request and response schemas, error bodies, and
+a runnable playground. Prefer it over inferring a shape from an example.
+
+<Note>
+The snapshot in this repository is promoted by the release workflow after the
+matching backend revision is deployed, so it can lag a released parameter by one
+release. Where the guides and the generated reference disagree — for example on
+the run parameter `wait_timeout_seconds` — the guides describe the current
+contract.
+</Note>
 
 Base URL: `https://albus.sh/api`. Both credentials are sent as
 `Authorization: Bearer <value>` — see [Authenticate](/getting-started/authenticate).
