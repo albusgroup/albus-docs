@@ -3,10 +3,10 @@ title: Run a session
 description: Everything a session run does — identity, history, waiting, idempotency, agent configuration, and failure modes.
 ---
 
-One operation runs an agent: `POST /sessions/{id}` (see the [API
-reference](/reference/overview)), `albus sessions run` in the CLI,
-`sessions.run_session` in Python, `sessions.runSession` in TypeScript.
-Everything on this page is that one call.
+Run an agent and collect its reply, from any client. One operation does it:
+`POST /sessions/{id}` (see the [API reference](/reference/overview)),
+`albus sessions run` in the CLI, `sessions.run_session` in Python,
+`sessions.runSession` in TypeScript. Everything on this page is that one call.
 
 Each call is an **invocation**: one prompt, one agent run, one assistant reply.
 
@@ -31,8 +31,8 @@ had, and `session.state` is `RUNNING`, `DONE`, `FAILED`, or `CANCELED`.
 
 <Note>
 A run loads up to the session's most recent 1000 messages as history. Beyond
-that, older turns fall out. There is no memory beyond a session — see [alpha
-limitations](/alpha/limitations).
+that, older turns fall out. There is no memory beyond a session — see [private
+beta limitations](/beta/limitations).
 </Note>
 
 ## Waiting for the reply
@@ -40,7 +40,8 @@ limitations](/alpha/limitations).
 A run is asynchronous underneath, with two ways to collect the result.
 
 **Wait (long-poll).** The request blocks until the assistant's reply exists and
-returns it in `messages`. This is the CLI default, and `wait=true` in the API.
+returns it in `messages`. This is the CLI default; over HTTP it is the
+`wait_timeout_seconds` query parameter.
 
 ```bash
 albus sessions run support-1234 -p "summarize" \
@@ -48,12 +49,26 @@ albus sessions run support-1234 -p "summarize" \
   --wait-timeout 120
 ```
 
-`--wait-timeout` (`wait_timeout`) bounds the wait server-side. If it elapses
-first the request fails with **`504`** and a JSON body — the run is still
-going, and retrying the same idempotency key re-attaches to it. Omit the timeout
-and the request waits as long as your client stays connected.
+```bash
+curl --fail-with-body \
+  --request POST "https://albus.sh/api/sessions/support-1234?wait_timeout_seconds=120" \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "user_prompt": "summarize",
+    "agent_name": "support-triage",
+    "agent": { "model": { "name": "gemini-3.6-flash" } }
+  }'
+```
 
-**Don't wait.** Return as soon as the invocation is accepted, then poll.
+`wait_timeout_seconds` bounds the wait server-side, in seconds. If it elapses
+first the request fails with **`504`** and a JSON body — the run is still going,
+and retrying the same idempotency key re-attaches to it. Pass `0` to wait until
+the reply arrives or your client disconnects; that is what the CLI sends for
+`--wait` without `--wait-timeout`.
+
+**Don't wait.** Return as soon as the invocation is accepted, then poll. Omit
+`wait_timeout_seconds` over HTTP; pass `--no-wait` in the CLI.
 
 ```bash
 albus sessions run support-1234 -p "summarize" \
@@ -116,7 +131,7 @@ revisions](/guides/agents-and-revisions).
 | `model.name` | Model identifier, e.g. `gemini-3.6-flash`. Required. |
 | `model.provider` | Your own provider and credential. Omit to use the model Albus provides — see [model providers](/guides/model-providers). |
 | `system_prompt` | System instructions. A server default applies when omitted. |
-| `tools` | Built-in tools the model may call. `WEB_SEARCH` is the only one in alpha; an unknown name is rejected up front. |
+| `tools` | Built-in tools the model may call. `WEB_SEARCH` is the only one in the private beta; an unknown name is rejected up front. |
 | `max_steps` | Cap on model steps before the run stops. |
 | `mcp_servers` | [MCP servers](/guides/mcp-servers) whose tools are offered to the model. |
 
@@ -143,10 +158,10 @@ Every one of these is a JSON body, not a bare status.
 |---|---|---|
 | `400` | Invalid request — unknown tool, malformed MCP server, missing model | Fix the request; nothing ran |
 | `401` | Credential missing, expired, or wrong for this API | `albus login`, or check `ALBUS_API_KEY` and the base URL |
-| `403` `not_provisioned` | Account is not on the alpha roster | [Request access](/getting-started/access) |
+| `403` `not_provisioned` | Account is not on the private-beta roster | [Request access](/getting-started/access) |
 | `409` | Idempotency key reused with a different body | Use a new key, or resend the original body |
 | `423` | Another invocation is already running in this session | Wait for it, or retry the running invocation's key |
-| `429` | Organization hit its run quota | 20 runs in alpha — email [carlo@albus.sh](mailto:carlo@albus.sh) |
+| `429` | Organization hit its run quota | 20 runs in the private beta — email [carlo@albus.sh](mailto:carlo@albus.sh) |
 | `502` | The run failed instead of replying | Body carries the failure kind and detail; check [the audit log](/guides/audit-log), then run again with a **new** idempotency key |
 | `504` | Timed out waiting for the reply | The run continues; retry the same idempotency key |
 
@@ -154,7 +169,8 @@ Note the difference between the two retries: reusing a key **re-attaches** to
 that invocation, so reusing the key of a failed run returns its failure again.
 Use the same key to recover a lost response (`504`, dropped connection), and a
 new key to actually run again. Albus does not retry a failed run for you — see
-[alpha limitations](/alpha/limitations).
+[private beta limitations](/beta/limitations). Every status above is documented
+field by field in the [error reference](/reference/errors).
 
 ## Clean up
 

@@ -1,24 +1,24 @@
 ---
 title: Support
-description: How to get help, more runs, or access during the alpha.
+description: How to get help, more runs, or access during the private beta.
 ---
 
-Email [carlo@albus.sh](mailto:carlo@albus.sh). There is no ticket system in
-alpha, and that address reaches someone who can change the platform.
+Email [carlo@albus.sh](mailto:carlo@albus.sh). There is no ticket system in the
+private beta, and that address reaches someone who can change the platform.
 
 Ask about:
 
 - **Access** — send the Google address you sign in with.
-- **More runs** — the alpha cap is [20 per organization](/alpha/limitations).
-- **A limitation that blocks you** — this is what orders the beta work.
+- **More runs** — the cap is [20 per organization](/beta/limitations).
+- **A limitation that blocks you** — this is what orders the roadmap.
 - **A bug** — include what makes it reproducible.
 
 ## What to include for a failed run
 
 ```bash
 albus status
-albus sessions get <session-id>
-albus sessions audit <session-id> --limit 50
+albus sessions get support-1234
+albus sessions audit support-1234 --limit 50
 ```
 
 Send the session id, the idempotency key of the run (the `idempotency_key` field

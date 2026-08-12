@@ -1,16 +1,17 @@
 ---
 title: Use your own model key
-description: Point a run at your own model provider and credential.
+description: Point a run at your own model provider account and credential.
 ---
 
-Omit `model.provider` and Albus runs the model on its own credentials — the
-fastest path, and enough for the alpha. Name a provider to use your own account
+Run a session on your own model provider account instead of Albus's. Omit
+`model.provider` and Albus runs the model on its own credentials — the fastest
+path, and enough for the private beta. Name a provider to use your own account
 instead: your quota, your rate limits, your billing.
 
 ## Store the key, then name the provider
 
 ```bash
-printf 'your-provider-api-key' | albus secrets create providers/gemini/prod
+printf '%s' "$GEMINI_API_KEY" | albus secrets create providers/gemini/prod
 ```
 
 <CodeGroup>
@@ -41,24 +42,8 @@ In the CLI, `--provider` and `--credential` must be given together.
 
 | Field | Meaning |
 |---|---|
-| `name` | Provider name, e.g. `gemini`, `vertex`, `openai`. |
-| `credential` | A [secret reference](/guides/secrets) — `albus.sh/secrets/<name>`. A raw key here is rejected. |
-| `url` | Base URL override for the provider endpoint. Agent-file only; there is no CLI flag. |
-
-`url` is how you reach an OpenAI-compatible gateway or a self-hosted endpoint:
-
-```json
-{
-  "model": {
-    "name": "my-model",
-    "provider": {
-      "name": "openai",
-      "url": "https://gateway.internal.example.com/v1",
-      "credential": "albus.sh/secrets/providers/gateway/key"
-    }
-  }
-}
-```
+| `name` | Provider name. Albus implements `gemini` and `vertex`; any other name fails the run. |
+| `credential` | A [secret reference](/guides/secrets) — `albus.sh/secrets/<name>`. The reference is resolved when the run starts, so the secret must exist. |
 
 <Note>
 The model must be one the named provider actually serves, and the credential must

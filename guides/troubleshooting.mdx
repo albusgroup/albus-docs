@@ -3,11 +3,15 @@ title: Troubleshooting
 description: Every error Albus and the CLI report, and what to do about it.
 ---
 
+Match an error Albus or the CLI reported to its cause and its fix. Errors are
+grouped by the operation that produces them; every message below is the literal
+text the client prints or the status code the API returns.
+
 ## Authentication and access
 
 **`this account is not in the Albus beta. Email carlo@albus.sh to request access.`**
 (API: `403` with `"code": "not_provisioned"`)
-Your credential is valid; the account is not on the alpha roster. [Request
+Your credential is valid; the account is not on the private-beta roster. [Request
 access](/getting-started/access). Nothing about your setup needs changing.
 
 **`401 Unauthorized`**
@@ -47,13 +51,13 @@ The same key was already used for a different prompt or agent configuration.
 Use a new key, or resend exactly the original body.
 
 **`429` — quota exceeded**
-The organization has spent its [20 alpha runs](/alpha/limitations). Retrying will
-not help; email [carlo@albus.sh](mailto:carlo@albus.sh).
+The organization has spent its [20 private-beta runs](/beta/limitations).
+Retrying will not help; email [carlo@albus.sh](mailto:carlo@albus.sh).
 
 **`504` — timed out waiting for the assistant response**
-Your `wait_timeout` elapsed; the run continues. Retry the **same** idempotency key
-to re-attach, or poll `albus sessions get`. Do not start a new key — you would run
-the prompt twice.
+Your `wait_timeout_seconds` elapsed (CLI: `--wait-timeout`); the run continues.
+Retry the **same** idempotency key to re-attach, or poll `albus sessions get`. Do
+not start a new key — you would run the prompt twice.
 
 **`502` — the run failed instead of producing a response**
 The body carries the failure kind and detail. Look at
@@ -63,8 +67,13 @@ failed key replays the failure.
 
 **`400` — invalid request**
 Something was rejected before anything ran: an unknown tool name, an MCP server
-missing `name` or `url`, a missing `model`, a malformed secret reference, or a
-reference to a secret that does not exist.
+with a missing, duplicated, or `__`-containing `name`, a `url` that is not an
+absolute http(s) URL, a missing `model`, or a malformed secret reference.
+
+**The invocation fails immediately, with no model call in the audit log**
+A secret reference names a secret that does not exist. References are resolved
+when the run starts, not when the request is validated, so a missing secret fails
+the run rather than the request. `albus secrets list` shows what exists.
 
 **`--agent-file holds the whole agent configuration and cannot be combined with the other agent options`**
 Move `--model` (and any other agent flag) into the JSON file.
@@ -89,8 +98,8 @@ which tools were called.
 
 **The MCP server rejects Albus's calls**
 The header value is wrong. Store the *complete* header value including any scheme
-— `Bearer ghp_…`, not `ghp_…`. Confirm the server speaks Streamable HTTP at the
-URL you gave; `stdio` servers cannot be reached.
+— `Bearer <token>`, not `<token>`. Confirm the server speaks Streamable HTTP at
+the URL you gave; `stdio` servers cannot be reached.
 
 ## Installation
 

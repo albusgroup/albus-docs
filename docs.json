@@ -8,7 +8,7 @@
     "dark": "#1D4ED8"
   },
   "banner": {
-    "content": "Albus is in alpha: invite-only, 20 session runs per organization. [What that means](/alpha/limitations)",
+    "content": "Albus is in private beta: invite-only, 20 session runs per organization. [What that means](/beta/limitations)",
     "dismissible": true
   },
   "contextual": {
@@ -53,12 +53,18 @@
         "pages": ["agents/docs"]
       },
       {
-        "group": "Alpha",
-        "pages": ["alpha/limitations", "alpha/support"]
+        "group": "Private beta",
+        "pages": ["beta/limitations", "beta/support"]
       },
       {
         "group": "Reference",
-        "pages": ["reference/cli", "reference/sdks", "reference/overview", "guides/releases"]
+        "pages": [
+          "reference/cli",
+          "reference/sdks",
+          "reference/errors",
+          "reference/overview",
+          "guides/releases"
+        ]
       },
       {
         "group": "API reference",
@@ -104,6 +110,14 @@
     {
       "source": "/agents/examples",
       "destination": "/agents/docs"
+    },
+    {
+      "source": "/alpha/limitations",
+      "destination": "/beta/limitations"
+    },
+    {
+      "source": "/alpha/support",
+      "destination": "/beta/support"
     }
   ]
 }

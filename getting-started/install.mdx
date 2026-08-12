@@ -3,11 +3,14 @@ title: Install
 description: Install the albus CLI, and the Python or TypeScript SDK.
 ---
 
+Install the client you will call Albus with. The CLI is the fastest way to run a
+session and the only way to sign in with a browser; the SDKs are for calling the
+API from your own code.
+
 ## CLI
 
-The `albus` CLI is the fastest way to run a session, and the only way to sign in
-with a browser. It is a Python package; the installer picks `uv`, `pip --user`,
-or `pip` inside a conda environment, in that order.
+`albus` is a Python package and needs Python 3.11 or newer. The installer picks
+`uv`, `pip --user`, or `pip` inside a conda environment, in that order.
 
 <CodeGroup>
 
@@ -60,10 +63,13 @@ npm install @albus-ts/sdk
 
 </CodeGroup>
 
-Both are generated from the same [OpenAPI
+The Python SDK needs Python 3.10 or newer; the TypeScript SDK needs a runtime
+with ECMAScript 2020 or newer (Node.js 18+, Bun 1+, Deno 1.39+). Both are
+generated from the same [OpenAPI
 contract](https://docs.albus.sh/openapi/openapi.yaml) as the API reference and
 default to `https://albus.sh/api`. They authenticate with an API key, which you
 mint after signing in — see [Authenticate](/getting-started/authenticate).
+Read [SDKs](/reference/sdks) for what each SDK currently supports.
 
 Next: [authenticate](/getting-started/authenticate), then [run your first
 session](/getting-started/first-session).

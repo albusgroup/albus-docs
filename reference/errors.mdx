@@ -1,0 +1,65 @@
+---
+title: Errors
+description: Every status code the Albus API returns, its body, and the fix.
+---
+
+Decide what to do with a status code Albus returned. Every error response is
+JSON. Most carry a single field:
+
+```json
+{ "message": "another invocation is currently running" }
+```
+
+Two carry more:
+
+- `403` from an account outside the private beta adds
+  `"code": "not_provisioned"`.
+- `502` from a failed run adds `"kind"`, naming the failure class.
+
+## Status codes
+
+| Status | Means | Retry? | Fix |
+|---|---|---|---|
+| `400` | The request was rejected before anything ran: unknown tool name, malformed MCP server declaration, missing `model`, malformed secret reference, or an invalid pagination cursor. | No | Correct the request. |
+| `401` | The credential is missing, malformed, or expired. | No | Send `Authorization: Bearer <credential>`. Mint a key with `albus tokens create`, or sign in again with `albus login`. |
+| `403` | Authenticated, but the account is not in the private beta (`"code": "not_provisioned"`). | No | [Request access](/getting-started/access). |
+| `404` | The session, secret, agent, revision, or token does not exist for this organization. | No | Check the identifier; `albus sessions list` / `albus secrets list` show what exists. |
+| `409` | The `Idempotency-Key` was already used for this session with a different body. | No | Use a new key, or resend the original body byte-for-byte. |
+| `423` | Another invocation is already running in this session. | Yes, after it finishes | Wait, re-send the running invocation's key to attach to it, or use a different session id. |
+| `429` | The organization has spent its private-beta invocation quota. | No | See [limitations](/beta/limitations); email carlo@albus.sh. |
+| `502` | The run itself failed. Body carries `message` and `kind`. | Yes, with a **new** key | Inspect [the audit log](/guides/audit-log) for `run_failed`. Reusing the failed key replays the failure. |
+| `503` | `GET /health` reports the service unavailable. | Yes | Retry; nothing to fix client-side. |
+| `504` | The `wait_timeout_seconds` you asked for elapsed. The run continues server-side. | Yes, with the **same** key | Re-send the same `Idempotency-Key` to re-attach, or poll `GET /sessions/{id}`. |
+
+A `504` is a server-side timeout with a JSON body, which is how you tell it apart
+from a transport timeout: a transport timeout has no body.
+
+## Authentication errors in detail
+
+Albus accepts two credentials, both as `Authorization: Bearer <value>`:
+
+| Credential | Authorizes | Wrong credential gives |
+|---|---|---|
+| Organization API key (`POST /tokens`) | `/sessions`, `/secrets`, `/agents` | `401` on `/whoami`, `/tokens`, `/invites` |
+| User bearer token (browser sign-in) | Everything above plus `/whoami`, `/tokens`, `/invites` | — |
+
+`GET /health` needs no credential.
+
+## Retrying safely
+
+Every retry of an invocation must carry the `Idempotency-Key` of the invocation
+it retries. Without a key, a retry is a second invocation, and it spends a second
+run against the quota.
+
+- Same key, identical body → re-attaches to the invocation.
+- Same key, different body → `409`.
+- New key while an invocation is running → `423`.
+- No key → a fresh invocation; the response's `Idempotency-Key` header carries
+  the key the server assigned.
+
+## In the SDKs
+
+Every non-2xx status raises a typed error carrying `status_code`, `message`, and
+`body` — `errors.AlbusError` and its subclasses in Python, the `errors` module in
+TypeScript. See [SDKs](/reference/sdks) for the retry configuration and its
+interaction with long-polling runs.

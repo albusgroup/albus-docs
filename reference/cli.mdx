@@ -3,9 +3,9 @@ title: CLI reference
 description: Every albus command, flag, and environment variable.
 ---
 
-The CLI is a thin shell over the [Python SDK](/reference/sdks): each command that
-calls Albus maps to one API operation and prints the JSON response, so output
-pipes into `jq`.
+Look up an `albus` command, flag, or environment variable. The CLI is a thin shell
+over the [Python SDK](/reference/sdks): each command that calls Albus maps to one
+API operation and prints the JSON response on stdout, so output pipes into `jq`.
 
 ```bash
 albus sessions get my-session | jq '.messages[-1].content'
@@ -52,8 +52,8 @@ albus --version
 ```bash
 albus sessions run SESSION_ID --prompt TEXT --agent-name NAME [options]
 albus sessions list
-albus sessions get SESSION_ID [--after CURSOR] [--limit N]
-albus sessions audit SESSION_ID [--after CURSOR] [--limit N]
+albus sessions get SESSION_ID [--after CURSOR] [--limit N]     # limit defaults to 100
+albus sessions audit SESSION_ID [--after CURSOR] [--limit N]   # limit defaults to 100
 albus sessions delete SESSION_ID
 ```
 
@@ -73,7 +73,14 @@ albus sessions delete SESSION_ID
 | `--wait` / `--no-wait` | Block for the reply (default) or return once accepted. |
 | `--wait-timeout` | Seconds to block server-side. Omit to wait indefinitely. |
 
-See [Run a session](/guides/run-a-session).
+`--wait` and `--wait-timeout` are the CLI's spelling of the API's
+`wait_timeout_seconds` query parameter: `--wait --wait-timeout 120` sends `120`,
+`--wait` alone sends `0` (wait indefinitely), and `--no-wait` omits the parameter
+so the call returns once the invocation is accepted.
+
+`sessions run` prints the API response plus one key the CLI adds,
+`idempotency_key` — the effective key of the invocation, which you resend to
+re-attach to a run. See [Run a session](/guides/run-a-session).
 
 ## Secrets
 
@@ -111,5 +118,13 @@ albus tokens delete ID
 
 ## Exit codes
 
-`0` on success. `1` on any failure, with a single-line `error: …` message on
-stderr naming the credential or field at fault — no traceback.
+`0` on success, `1` on any failure. A failure prints two lines on stderr and no
+traceback:
+
+```text
+albus: <what the server or the client refused>
+albus: docs: https://docs.albus.sh/guides/troubleshooting
+```
+
+`albus status` is the exception: it exits `0` even when the credential is
+rejected, and reports the refusal in its JSON `error` field.

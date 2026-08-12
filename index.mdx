@@ -3,22 +3,23 @@ title: Albus
 description: Run agent sessions over an HTTP API — a CLI, two SDKs, MCP tools, and organization-scoped secrets.
 ---
 
-Albus runs an agent for you. You send a prompt and an agent configuration; Albus
-executes the model loop in an isolated environment, connects the MCP servers you
-declare, and returns the assistant's reply. A session keeps its history, so the
-next prompt continues the conversation.
+Run an agent session over an HTTP API: you send a prompt and an agent
+configuration, Albus executes the model loop in an isolated environment,
+connects the MCP servers you declare, and returns the assistant's reply. A
+session keeps its history, so the next prompt continues the conversation.
 
 <Note>
-Albus is in **alpha**, by invitation, with a cap of 20 session runs per
-organization. Read [what alpha does not do yet](/alpha/limitations) before you
-build on it.
+Albus is in **private beta**, by invitation, with a cap of 20 session runs per
+organization. Read [what the private beta does not do
+yet](/beta/limitations) before you build on it.
 </Note>
 
 ## Run your first session
 
 <Steps>
   <Step title="Get access">
-    Alpha is invite-only. [Request access](/getting-started/access).
+    The private beta is invite-only. [Request
+    access](/getting-started/access).
   </Step>
   <Step title="Install the CLI">
     ```bash
@@ -57,8 +58,8 @@ thing in Python, TypeScript, and cURL.
     Setup, the whole API surface, and examples — one page to hand to Codex,
     Claude Code, or Cursor.
   </Card>
-  <Card title="Alpha limitations" icon="triangle-exclamation" href="/alpha/limitations">
-    What is not there yet, and what arrives in beta.
+  <Card title="Private beta limitations" icon="triangle-exclamation" href="/beta/limitations">
+    What is not there yet, and what to design around.
   </Card>
 </CardGroup>
 
