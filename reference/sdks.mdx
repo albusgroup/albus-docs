@@ -28,17 +28,17 @@ on.
 ```python Python
 import os
 
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 
 # Organization API key — sessions, secrets, agents.
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     print([session.id for session in albus.sessions.list_sessions().sessions])
 
 # User bearer token — /whoami and /tokens.
 with Albus(
-    security=models.Security(bearer_auth=os.environ["ALBUS_BEARER_AUTH"]),
+    access_token=os.environ["ALBUS_BEARER_AUTH"],
 ) as albus:
     print(albus.auth.whoami().email)
 ```
@@ -56,7 +56,11 @@ console.log(sessions.map((session) => session.id));
 
 </CodeGroup>
 
-Constructed with no security argument, both clients read `ALBUS_API_KEY_AUTH` and
+Python takes the credential directly: `api_key=` for an organization API key and
+`access_token=` for a user bearer token, and passing both is an error.
+TypeScript takes `security: { apiKeyAuth }` or `security: { bearerAuth }`.
+
+Constructed with no credential, both clients read `ALBUS_API_KEY_AUTH` and
 `ALBUS_BEARER_AUTH` from the environment. Note these are *not* the CLI's
 `ALBUS_API_KEY` — see [Authenticate](/getting-started/authenticate).
 
@@ -125,6 +129,9 @@ document is deployed, never before.
 
 `waitTimeoutSeconds` needs `@albus-ts/sdk` 0.5.0 or newer; earlier versions
 cannot send the wait at all.
+
+`api_key=` and `access_token=` need `albus-sdk` 0.8.0 or newer; earlier versions
+take `security=models.Security(...)` instead.
 
 Runtime requirements: Python 3.10+; for TypeScript, ECMAScript 2020+ — Node.js
 active or maintenance LTS (v18, v20), Bun 1+, or Deno 1.39+.

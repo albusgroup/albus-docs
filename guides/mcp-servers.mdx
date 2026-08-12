@@ -112,10 +112,10 @@ handling.
 ```python Python
 import os
 
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     response = albus.sessions.run_session(
         id="repo-triage",

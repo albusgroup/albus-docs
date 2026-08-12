@@ -55,7 +55,7 @@ albus status
 
 ```json
 {
-  "cli_version": "0.2.0",
+  "cli_version": "0.3.0",
   "base_url": "https://albus.sh/api",
   "credential": "none",
   "authenticated": false
@@ -252,13 +252,13 @@ Idempotency-Key: support-1234-summary-v1
 ```python Python
 import os
 
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 
 SESSION = "example-resume"
 AGENT = {"model": {"name": "gemini-3.6-flash"}}
 
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     for prompt in ["Name three primary colors.", "Now sort them alphabetically."]:
         response = albus.sessions.run_session(
@@ -313,12 +313,12 @@ running".
 ```python Python
 import os
 
-from albus_sdk import Albus, errors, models
+from albus_sdk import Albus, errors
 
 TICKET = "support-1234"
 
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     for attempt in range(3):
         try:
@@ -346,10 +346,10 @@ with Albus(
 ```python Python
 import os
 
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     albus.secrets.create_secret(
         name="integrations/github/token",
@@ -396,7 +396,7 @@ revision` is the exact configuration that ran it.
 import asyncio
 import os
 
-from albus_sdk import AsyncAlbus, models
+from albus_sdk import AsyncAlbus
 
 TICKETS = ["support-1", "support-2", "support-3"]
 
@@ -415,7 +415,7 @@ async def summarize(albus: AsyncAlbus, ticket: str) -> str:
 
 async def main() -> None:
     async with AsyncAlbus(
-        security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+        api_key=os.environ["ALBUS_API_KEY_AUTH"],
     ) as albus:
         for summary in await asyncio.gather(
             *(summarize(albus, ticket) for ticket in TICKETS)
