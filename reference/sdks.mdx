@@ -96,22 +96,35 @@ pass in).
 
 ## Waiting for a reply
 
-The Python SDK takes the wait as `wait_timeout_seconds=<n>` on
-`sessions.run_session`, matching the API's query parameter.
+Both clients take the wait on the run itself, matching the API's
+`wait_timeout_seconds` query parameter: `wait_timeout_seconds=<n>` in Python, and
+`waitTimeoutSeconds: <n>` beside `body` in TypeScript.
 
-<Warning>
-The published TypeScript SDK (`@albus-ts/sdk` 0.4.0) predates that parameter: its
-`runSession` still exposes `wait` and `waitTimeout`, which the current API does
-not accept. Until a regenerated version ships, start the run and poll
-`getSession` until `session.state` leaves `RUNNING` — as shown in
-[Run your first session](/getting-started/first-session).
-</Warning>
+```typescript
+const response = await albus.sessions.runSession({
+  id: "support-1234",
+  waitTimeoutSeconds: 120,
+  body: {
+    userPrompt: "summarize",
+    agentName: "support-triage",
+    agent: { model: { name: "gemini-3.6-flash" } },
+  },
+});
+
+console.log(response.result.messages.at(-1)?.content);
+```
+
+Omit it to return as soon as the invocation is accepted, then poll `getSession` /
+`get_session` until `session.state` leaves `RUNNING`.
 
 ## Versions
 
 The published SDK version that matches the current API reference is recorded in
 the [release policy](/guides/releases). SDKs are released after the API they
 document is deployed, never before.
+
+`waitTimeoutSeconds` needs `@albus-ts/sdk` 0.5.0 or newer; earlier versions
+cannot send the wait at all.
 
 Runtime requirements: Python 3.10+; for TypeScript, ECMAScript 2020+ — Node.js
 active or maintenance LTS (v18, v20), Bun 1+, or Deno 1.39+.

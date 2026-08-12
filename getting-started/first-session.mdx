@@ -44,8 +44,9 @@ const albus = new Albus({
   security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
 });
 
-await albus.sessions.runSession({
+const response = await albus.sessions.runSession({
   id: "my-first-session",
+  waitTimeoutSeconds: 120,
   body: {
     userPrompt: "In one sentence, what is a session?",
     agentName: "demo",
@@ -53,14 +54,7 @@ await albus.sessions.runSession({
   },
 });
 
-// The run was accepted; poll until it finishes.
-let session = await albus.sessions.getSession({ id: "my-first-session" });
-while (session.session.state === "RUNNING") {
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-  session = await albus.sessions.getSession({ id: "my-first-session" });
-}
-
-for (const message of session.messages) {
+for (const message of response.result.messages) {
   console.log(`${message.role}: ${message.content}`);
 }
 ```
@@ -81,10 +75,10 @@ curl --fail-with-body \
 </CodeGroup>
 
 <Note>
-`wait_timeout_seconds` makes the request long-poll until the assistant's reply is
-available. The TypeScript SDK cannot send it yet — see
-[SDKs](/reference/sdks) — so the example above starts the run and polls
-`getSession` instead.
+The wait makes the request long-poll until the assistant's reply is available:
+`wait_timeout_seconds` over HTTP and in Python, `waitTimeoutSeconds` in
+TypeScript, `--wait-timeout` in the CLI. Omit it and the call returns as soon as
+the run is accepted — see [Run a session](/guides/run-a-session#waiting-for-the-reply).
 </Note>
 
 The response is the session and its messages:

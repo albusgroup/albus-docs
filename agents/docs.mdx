@@ -55,7 +55,7 @@ albus status
 
 ```json
 {
-  "cli_version": "0.1.0",
+  "cli_version": "0.2.0",
   "base_url": "https://albus.sh/api",
   "credential": "none",
   "authenticated": false
@@ -281,24 +281,17 @@ const albus = new Albus({
 const session = "example-resume";
 const agent = { model: { name: "gemini-3.6-flash" } };
 
-// @albus-ts/sdk 0.4.0 cannot send wait_timeout_seconds yet, so start the run
-// and poll until it finishes.
 for (const userPrompt of [
   "Name three primary colors.",
   "Now sort them alphabetically.",
 ]) {
-  await albus.sessions.runSession({
+  const response = await albus.sessions.runSession({
     id: session,
+    waitTimeoutSeconds: 300,
     body: { userPrompt, agentName: "example", agent },
   });
 
-  let current = await albus.sessions.getSession({ id: session });
-  while (current.session.state === "RUNNING") {
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    current = await albus.sessions.getSession({ id: session });
-  }
-
-  console.log(current.messages.at(-1)?.content);
+  console.log(response.result.messages.at(-1)?.content);
 }
 ```
 

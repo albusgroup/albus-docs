@@ -148,8 +148,9 @@ const albus = new Albus({
   security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
 });
 
-await albus.sessions.runSession({
+const response = await albus.sessions.runSession({
   id: "repo-triage",
+  waitTimeoutSeconds: 300,
   body: {
     userPrompt: "Find open issues mentioning login failures.",
     agentName: "repo-triage",
@@ -169,14 +170,9 @@ await albus.sessions.runSession({
   },
 });
 
-// The TypeScript SDK cannot long-poll yet (see /reference/sdks), so poll.
-let session = await albus.sessions.getSession({ id: "repo-triage" });
-while (session.session.state === "RUNNING") {
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-  session = await albus.sessions.getSession({ id: "repo-triage" });
+for (const message of response.result.messages) {
+  console.log(`${message.role}: ${message.content}`);
 }
-
-console.log(session.messages.at(-1)?.content);
 ```
 
 </CodeGroup>
