@@ -38,10 +38,10 @@ Full detail: [private-beta limitations](/beta/limitations).
 ### 1. Install the CLI
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
+curl -fsSL https://albus.sh/install.sh | sh
 ```
 
-On Windows: `irm https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.ps1 | iex`.
+On Windows: `irm https://albus.sh/install.ps1 | iex`.
 
 The installer uses `uv tool install`, then `pip install --user`, then conda. If
 `albus` is not on `PATH` afterwards, it is in the scripts directory the installer
@@ -55,7 +55,7 @@ albus status
 
 ```json
 {
-  "cli_version": "0.2.0",
+  "cli_version": "0.3.1",
   "base_url": "https://albus.sh/api",
   "credential": "none",
   "authenticated": false
@@ -197,13 +197,15 @@ Idempotency-Key: support-1234-summary-v1
 ```
 
 - `wait_timeout_seconds=<n>` blocks up to `n` seconds until the assistant replies
-  and returns the session with its messages. `wait_timeout_seconds=0` waits
-  without a bound. Omit the parameter to return as soon as the run is accepted,
-  then poll `GET /sessions/{id}` until `session.state` leaves `RUNNING`.
+  and returns the session with its messages. `1800` is the maximum, and what an
+  omitted parameter means. `wait_timeout_seconds=0` does not wait: it returns as
+  soon as the run is accepted, and you poll `GET /sessions/{id}` until
+  `session.state` leaves `RUNNING`.
 - Exceeding the wait is `504`, and the run is still going.
 - The CLI spells the same thing as `--wait`/`--no-wait` and `--wait-timeout`:
-  `--wait` (the default) with no `--wait-timeout` sends `0`, and `--no-wait` omits
-  the parameter.
+  `--wait` (the default) with no `--wait-timeout` omits the parameter, and
+  `--no-wait` sends `0`. Both SDKs default the wait to `1800` and give the run a
+  31-minute transport timeout, so a waiting run needs no client configuration.
 - Omitting `agent.model.provider` uses the model credential Albus supplies, which
   is what a first run should do. To bring your own, store it as a secret and
   reference it — see [model providers](/guides/model-providers).
@@ -252,13 +254,13 @@ Idempotency-Key: support-1234-summary-v1
 ```python Python
 import os
 
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 
 SESSION = "example-resume"
 AGENT = {"model": {"name": "gemini-3.6-flash"}}
 
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     for prompt in ["Name three primary colors.", "Now sort them alphabetically."]:
         response = albus.sessions.run_session(
@@ -313,12 +315,12 @@ running".
 ```python Python
 import os
 
-from albus_sdk import Albus, errors, models
+from albus_sdk import Albus, errors
 
 TICKET = "support-1234"
 
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     for attempt in range(3):
         try:
@@ -346,10 +348,10 @@ with Albus(
 ```python Python
 import os
 
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     albus.secrets.create_secret(
         name="integrations/github/token",
@@ -396,7 +398,7 @@ revision` is the exact configuration that ran it.
 import asyncio
 import os
 
-from albus_sdk import AsyncAlbus, models
+from albus_sdk import AsyncAlbus
 
 TICKETS = ["support-1", "support-2", "support-3"]
 
@@ -415,7 +417,7 @@ async def summarize(albus: AsyncAlbus, ticket: str) -> str:
 
 async def main() -> None:
     async with AsyncAlbus(
-        security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+        api_key=os.environ["ALBUS_API_KEY_AUTH"],
     ) as albus:
         for summary in await asyncio.gather(
             *(summarize(albus, ticket) for ticket in TICKETS)

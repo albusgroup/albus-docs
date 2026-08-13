@@ -91,10 +91,10 @@ albus sessions list
 
 ```python Python
 import os
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     print(albus.sessions.list_sessions())
 ```
@@ -120,8 +120,8 @@ curl --fail-with-body \
 <Note>
 The variable names differ by client: the CLI reads `ALBUS_API_KEY`, and the SDKs
 read `ALBUS_API_KEY_AUTH` (or `ALBUS_BEARER_AUTH` for a user token) when you
-construct the client with no explicit security. Export both, or pass the key
-explicitly.
+construct the client with no credential. Export both, or pass the key explicitly
+— `api_key=` in Python, `security: { apiKeyAuth }` in TypeScript.
 </Note>
 
 In the CLI, an exported `ALBUS_API_KEY` **wins over a stored session**, so an
