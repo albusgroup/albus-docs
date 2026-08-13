@@ -20,10 +20,10 @@ albus sessions run my-first-session \
 ```python Python
 import os
 
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     response = albus.sessions.run_session(
         id="my-first-session",
@@ -77,8 +77,9 @@ curl --fail-with-body \
 <Note>
 The wait makes the request long-poll until the assistant's reply is available:
 `wait_timeout_seconds` over HTTP and in Python, `waitTimeoutSeconds` in
-TypeScript, `--wait-timeout` in the CLI. Omit it and the call returns as soon as
-the run is accepted — see [Run a session](/guides/run-a-session#waiting-for-the-reply).
+TypeScript, `--wait-timeout` in the CLI. Omit it and you wait up to 30 minutes,
+the maximum; pass `0` to return as soon as the run is accepted — see [Run a
+session](/guides/run-a-session#waiting-for-the-reply).
 </Note>
 
 The response is the session and its messages:

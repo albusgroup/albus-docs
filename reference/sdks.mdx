@@ -28,17 +28,17 @@ on.
 ```python Python
 import os
 
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 
 # Organization API key — sessions, secrets, agents.
 with Albus(
-    security=models.Security(api_key_auth=os.environ["ALBUS_API_KEY_AUTH"]),
+    api_key=os.environ["ALBUS_API_KEY_AUTH"],
 ) as albus:
     print([session.id for session in albus.sessions.list_sessions().sessions])
 
 # User bearer token — /whoami and /tokens.
 with Albus(
-    security=models.Security(bearer_auth=os.environ["ALBUS_BEARER_AUTH"]),
+    access_token=os.environ["ALBUS_BEARER_AUTH"],
 ) as albus:
     print(albus.auth.whoami().email)
 ```
@@ -56,9 +56,12 @@ console.log(sessions.map((session) => session.id));
 
 </CodeGroup>
 
-Constructed with no security argument, both clients read `ALBUS_API_KEY_AUTH` and
-`ALBUS_BEARER_AUTH` from the environment. Note these are *not* the CLI's
-`ALBUS_API_KEY` — see [Authenticate](/getting-started/authenticate).
+The two clients spell it differently: Python takes the credential directly
+(`api_key=` or `access_token=`, and supplying both raises `ValueError`), while
+TypeScript takes a `security` object (`apiKeyAuth` or `bearerAuth`). Constructed
+with no credential, both read `ALBUS_API_KEY_AUTH` and `ALBUS_BEARER_AUTH` from
+the environment. Note these are *not* the CLI's `ALBUS_API_KEY` — see
+[Authenticate](/getting-started/authenticate).
 
 ## Responses
 
@@ -98,7 +101,10 @@ pass in).
 
 Both clients take the wait on the run itself, matching the API's
 `wait_timeout_seconds` query parameter: `wait_timeout_seconds=<n>` in Python, and
-`waitTimeoutSeconds: <n>` beside `body` in TypeScript.
+`waitTimeoutSeconds: <n>` beside `body` in TypeScript. Both default it to `1800`
+(30 minutes, the API's maximum) and give `run_session` / `runSession` a matching
+31-minute transport timeout, so a plain waiting run works without configuring
+anything.
 
 ```typescript
 const response = await albus.sessions.runSession({
@@ -114,8 +120,14 @@ const response = await albus.sessions.runSession({
 console.log(response.result.messages.at(-1)?.content);
 ```
 
-Omit it to return as soon as the invocation is accepted, then poll `getSession` /
+Pass `0` to return as soon as the invocation is accepted, then poll `getSession` /
 `get_session` until `session.state` leaves `RUNNING`.
+
+<Warning>
+A client-level `timeout_ms` / `timeoutMs` applies to the waiting run too, and
+replaces that 31-minute default. Set it above the longest wait you ask for, or the
+transport gives up while the run is still going.
+</Warning>
 
 ## Versions
 
@@ -123,8 +135,14 @@ The published SDK version that matches the current API reference is recorded in
 the [release policy](/guides/releases). SDKs are released after the API they
 document is deployed, never before.
 
-`waitTimeoutSeconds` needs `@albus-ts/sdk` 0.5.0 or newer; earlier versions
-cannot send the wait at all.
+Current floors for the examples on this page:
+
+| Package | Version | Why |
+|---|---|---|
+| `albus-sdk` | 0.8.0 | `api_key=` / `access_token=` replaced the `security=` constructor argument, which now raises `TypeError` |
+| `albus-sdk` | 0.8.1 | An omitted wait means 30 minutes rather than no wait, with a matching transport timeout |
+| `@albus-ts/sdk` | 0.5.0 | `waitTimeoutSeconds` — earlier versions cannot send the wait at all |
+| `@albus-ts/sdk` | 0.5.1 | The same 30-minute default and transport timeout |
 
 Runtime requirements: Python 3.10+; for TypeScript, ECMAScript 2020+ — Node.js
 active or maintenance LTS (v18, v20), Bun 1+, or Deno 1.39+.

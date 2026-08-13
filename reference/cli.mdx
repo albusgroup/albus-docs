@@ -71,12 +71,12 @@ albus sessions delete SESSION_ID
 | `--agent-file` | JSON file holding the whole agent configuration. Cannot be combined with the options above. |
 | `--idempotency-key` | Makes the run retry-safe. |
 | `--wait` / `--no-wait` | Block for the reply (default) or return once accepted. |
-| `--wait-timeout` | Seconds to block server-side. Omit to wait indefinitely. |
+| `--wait-timeout` | Seconds to block server-side, up to `1800`. Omit for the server's 30-minute default. |
 
 `--wait` and `--wait-timeout` are the CLI's spelling of the API's
 `wait_timeout_seconds` query parameter: `--wait --wait-timeout 120` sends `120`,
-`--wait` alone sends `0` (wait indefinitely), and `--no-wait` omits the parameter
-so the call returns once the invocation is accepted.
+`--wait` alone omits the parameter and takes the server's 30-minute default, and
+`--no-wait` sends `0`, so the call returns once the invocation is accepted.
 
 `sessions run` prints the API response plus one key the CLI adds,
 `idempotency_key` — the effective key of the invocation, which you resend to
@@ -93,6 +93,15 @@ albus secrets delete NAME
 ```
 
 See [Secrets](/guides/secrets).
+
+## Invites
+
+```bash
+albus invites create EMAIL
+```
+
+Invites a person by email; they get their own organization when they first sign
+in. Needs the browser session, like `tokens`.
 
 ## Agents
 

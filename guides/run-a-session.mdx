@@ -61,14 +61,14 @@ curl --fail-with-body \
   }'
 ```
 
-`wait_timeout_seconds` bounds the wait server-side, in seconds. If it elapses
-first the request fails with **`504`** and a JSON body — the run is still going,
-and retrying the same idempotency key re-attaches to it. Pass `0` to wait until
-the reply arrives or your client disconnects; that is what the CLI sends for
-`--wait` without `--wait-timeout`.
+`wait_timeout_seconds` bounds the wait server-side, in seconds, up to `1800`. If
+it elapses first the request fails with **`504`** and a JSON body — the run is
+still going, and retrying the same idempotency key re-attaches to it. Omit the
+parameter and you get the maximum: 30 minutes. That is what the CLI sends for
+`--wait` without `--wait-timeout`, and what both SDKs send when you pass no wait.
 
-**Don't wait.** Return as soon as the invocation is accepted, then poll. Omit
-`wait_timeout_seconds` over HTTP; pass `--no-wait` in the CLI.
+**Don't wait.** Return as soon as the invocation is accepted, then poll. Send
+`wait_timeout_seconds=0`, or pass `--no-wait` in the CLI.
 
 ```bash
 albus sessions run support-1234 -p "summarize" \
@@ -130,7 +130,7 @@ revisions](/guides/agents-and-revisions).
 |---|---|
 | `model.name` | Model identifier, e.g. `gemini-3.6-flash`. Required. |
 | `model.provider` | Your own provider and credential. Omit to use the model Albus provides — see [model providers](/guides/model-providers). |
-| `system_prompt` | System instructions. A server default applies when omitted. |
+| `system_prompt` | System instructions. A server default applies when omitted. Albus prefixes either with the current server date and time, so the model can answer time-sensitive questions. |
 | `tools` | Built-in tools the model may call. `WEB_SEARCH` is the only one in the private beta; an unknown name is rejected up front. |
 | `max_steps` | Cap on model steps before the run stops. |
 | `mcp_servers` | [MCP servers](/guides/mcp-servers) whose tools are offered to the model. |
