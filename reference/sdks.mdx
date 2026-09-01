@@ -104,10 +104,10 @@ traces = albus.traces.list_traces(agent_name="support-triage", limit=10)
 trace = albus.traces.get_trace(invocation_key="support-1234-summary-1")
 print(trace.result.status, len(trace.result.spans))
 for attempt in trace.result.attempts or []:
-    print(attempt.attempt, attempt.status, attempt.usage.total_tokens)
+    print(attempt.attempt, attempt.status, attempt.usage.total_tokens if attempt.usage else 0)
 
 memories = albus.memories.list_memories(group="support")
-albus.memories.delete_memory(id=memories.memories[0].id)
+albus.memories.delete_memory(group="support", id=memories.memories[0].id)
 
 print([(model.name, model.provider) for model in albus.models.list_models().models])
 ```

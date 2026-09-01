@@ -170,7 +170,7 @@ Base URL `https://albus.sh/api`. Authenticate with `Authorization: Bearer <key>`
 | List invocations across sessions | `GET /traces` | — |
 | Read one invocation and its spans | `GET /traces/{invocation_key}` | — |
 | List a memory group | `GET /memories?group=NAME` | — |
-| Delete a memory, or a whole group | `DELETE /memories/{id}`, `DELETE /memories?group=NAME` | — |
+| Delete a memory, or a whole group | `DELETE /memories/{id}?group=NAME`, `DELETE /memories?group=NAME` | — |
 | List the models Albus serves | `GET /models` | `albus models list` |
 | Mint or manage API keys | `/tokens` | `albus tokens create\|list\|get\|delete` |
 | Invite someone | `POST /invites` | `albus invites create EMAIL` |
