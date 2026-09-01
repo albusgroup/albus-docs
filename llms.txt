@@ -2,8 +2,10 @@
 
 > Albus runs agent sessions over an HTTP API. You send a prompt and an agent
 > configuration; Albus executes the model loop, connects the MCP servers you
-> declare, and returns the assistant's reply. Private beta: invite-only, 20
-> session runs per organization.
+> declare, and returns the assistant's reply. Agents can search the web, run
+> commands in a sandboxed terminal, keep memory across sessions, and answer in a
+> JSON schema you give them; every invocation is recorded as a trace. Private
+> beta: invite-only, 20 session runs per organization.
 
 ## Agent Instructions
 
@@ -24,7 +26,7 @@ available as Markdown at the same URL with `.md` appended.
 
 ## Guides
 
-- [Run a session](https://docs.albus.sh/guides/run-a-session.md): Run a turn, wait for the reply, resume the conversation, and retry safely.
+- [Run a session](https://docs.albus.sh/guides/run-a-session.md): Run a turn, wait for the reply, resume it, retry safely, and read its trace; tools, memory, and structured output.
 - [Secrets](https://docs.albus.sh/guides/secrets.md): Store a credential and reference it from an agent configuration.
 - [MCP servers](https://docs.albus.sh/guides/mcp-servers.md): Give an agent tools by declaring MCP servers.
 - [Model providers](https://docs.albus.sh/guides/model-providers.md): Run a session on your own model provider account.
@@ -42,7 +44,7 @@ available as Markdown at the same URL with `.md` appended.
 
 ## Private beta
 
-- [Limitations](https://docs.albus.sh/beta/limitations.md): Quota, memory, execution, and observability limits.
+- [Limitations](https://docs.albus.sh/beta/limitations.md): Quota, concurrency, retries, usage reporting, and observability limits.
 - [Support](https://docs.albus.sh/beta/support.md): How to reach us, and what to include.
 
 ## OpenAPI Specs

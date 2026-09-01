@@ -18,6 +18,19 @@ contract.
 Base URL: `https://albus.sh/api`. Both credentials are sent as
 `Authorization: Bearer <value>` — see [Authenticate](/getting-started/authenticate).
 
+The operations, by resource:
+
+| Resource | Operations |
+|---|---|
+| Sessions | Run or resume a session, read it with its messages, list, delete, and read its audit log |
+| Traces | List invocations across sessions, and read one back by invocation key with its spans, attempts, and token usage |
+| Memories | List a memory group, delete one memory, delete a whole group |
+| Agents | List agents and read a revision's configuration |
+| Secrets | Create, list, read (masked), update, delete |
+| Models | List the models Albus serves and the provider each runs on |
+| Tokens | Mint, list, read, and revoke organization API keys |
+| Auth | `/whoami`, and `/invites` for inviting a user |
+
 For an agent or a code generator, download the [OpenAPI
 document](/openapi/openapi.yaml) directly. The [SDKs](/reference/sdks) and the
 [CLI](/reference/cli) are generated from that same snapshot, so an operation here

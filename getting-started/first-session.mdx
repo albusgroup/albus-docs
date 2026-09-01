@@ -23,7 +23,7 @@ import os
 from albus_sdk import Albus
 
 with Albus(
-    api_key=os.environ["ALBUS_API_KEY_AUTH"],
+    api_key=os.environ["ALBUS_API_KEY"],
 ) as albus:
     response = albus.sessions.run_session(
         id="my-first-session",
@@ -33,15 +33,14 @@ with Albus(
         wait_timeout_seconds=120,
     )
 
-    for message in response.result.messages:
-        print(f"{message.role}: {message.content}")
+    print(response.result.message.content)
 ```
 
 ```typescript TypeScript
 import { Albus } from "@albus-ts/sdk";
 
 const albus = new Albus({
-  security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
+  security: { apiKey: process.env.ALBUS_API_KEY ?? "" },
 });
 
 const response = await albus.sessions.runSession({
@@ -54,9 +53,7 @@ const response = await albus.sessions.runSession({
   },
 });
 
-for (const message of response.result.messages) {
-  console.log(`${message.role}: ${message.content}`);
-}
+console.log(response.result.message?.content);
 ```
 
 ```bash cURL
@@ -82,7 +79,7 @@ the maximum; pass `0` to return as soon as the run is accepted — see [Run a
 session](/guides/run-a-session#waiting-for-the-reply).
 </Note>
 
-The response is the session and its messages:
+The response is the session and the one message this invocation produced:
 
 ```json
 {
@@ -95,27 +92,21 @@ The response is the session and its messages:
     "created_at": "2026-02-10T18:03:44Z",
     "updated_at": "2026-02-10T18:03:51Z"
   },
-  "messages": [
-    {
-      "cursor": 1,
-      "invocation_id": "3f7c1e02-9a4b-4d81-b6de-5c2a70f18e44",
-      "role": "user",
-      "content": "In one sentence, what is a session?",
-      "created_at": "2026-02-10T18:03:44Z"
-    },
-    {
-      "cursor": 2,
-      "invocation_id": "3f7c1e02-9a4b-4d81-b6de-5c2a70f18e44",
-      "role": "assistant",
-      "content": "A session is a named, ongoing conversation with an agent.",
-      "created_at": "2026-02-10T18:03:51Z"
-    }
-  ]
+  "message": {
+    "cursor": 2,
+    "invocation_id": "3f7c1e02-9a4b-4d81-b6de-5c2a70f18e44",
+    "role": "assistant",
+    "content": "A session is a named, ongoing conversation with an agent.",
+    "created_at": "2026-02-10T18:03:51Z"
+  }
 }
 ```
 
-The CLI prints the same object plus the run's `idempotency_key`, taken from the
-response header.
+`message` is the assistant's reply, and is absent when the invocation has not
+answered yet — `wait_timeout_seconds=0`, or a wait that returned first. The whole
+conversation comes from `GET /sessions/{id}`, whose `messages` array holds every
+turn. The CLI prints the same object plus the run's `invocation_key`, taken from
+the response header.
 
 ## Continue the conversation
 
@@ -137,13 +128,17 @@ albus sessions audit my-first-session --limit 20
 ```
 
 `get` returns the messages; [`audit`](/guides/audit-log) returns what happened
-inside the runs — model calls, tool calls, and outcomes.
+inside the runs — model calls, tool calls, and outcomes. `GET /traces` and
+`GET /traces/{invocation_key}` return the same invocations as spans, across
+sessions, with token usage — see [run a
+session](/guides/run-a-session#reading-an-invocation-back).
 
 ## What to read next
 
 - [Run a session](/guides/run-a-session) — waiting, resuming, idempotency, and
   every failure mode. Read this before writing anything real.
 - [Connect MCP servers](/guides/mcp-servers) — give the agent tools.
-- [Use your own model key](/guides/model-providers) — bring your own provider.
+- [Use your own model key](/guides/model-providers) — bring your own provider,
+  and `albus models list` for the models Albus serves.
 - [Private beta limitations](/beta/limitations) — including the 20-run cap, which
   this session just spent one of.

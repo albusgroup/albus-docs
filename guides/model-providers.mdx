@@ -8,6 +8,19 @@ Run a session on your own model provider account instead of Albus's. Omit
 path, and enough for the private beta. Name a provider to use your own account
 instead: your quota, your rate limits, your billing.
 
+## The models Albus serves
+
+Without a provider of your own, the model has to be one Albus's catalog serves,
+and `GET /models` is that catalog — each model with the provider running it:
+
+```bash
+albus models list
+```
+
+A model that is not in it fails the request with **`400`** rather than the run,
+so name the provider serving it in `model.provider` to run it on your own
+account.
+
 ## Store the key, then name the provider
 
 ```bash
@@ -42,7 +55,7 @@ In the CLI, `--provider` and `--credential` must be given together.
 
 | Field | Meaning |
 |---|---|
-| `name` | Provider name. Albus implements `gemini` and `vertex`; any other name fails the run. |
+| `name` | Provider name. Albus implements `gemini`, `openai`, `anthropic`, and `together`; any other name fails the run. |
 | `credential` | A [secret reference](/guides/secrets) — `albus.sh/secrets/<name>`. The reference is resolved when the run starts, so the secret must exist. |
 
 <Note>

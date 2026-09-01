@@ -5,8 +5,12 @@ description: See what happened inside a run — model calls, tool calls, and out
 
 Find out what happened inside a run. `sessions get` returns the conversation; the
 audit log returns the run itself — an immutable, time-ordered record of the model
-calls, the tool calls and their output, and how the run ended. It is the
-debugging surface in the private beta: there are no traces or dashboards yet.
+calls, the tool calls and their output, and how the run ended.
+
+It is per-session and complete. For the same events across sessions — filtered by
+agent, revision, status, or time, with each invocation's attempts and token usage
+— read [traces](/guides/run-a-session#reading-an-invocation-back) instead, in the
+API or in the console.
 
 ```bash
 albus sessions audit support-1234 --limit 50
@@ -21,19 +25,22 @@ omitted when there are no more events, and an invalid cursor returns `400`.
 
 | `type` | What it records |
 |---|---|
-| `agent_invocation` | The request that started the run |
+| `agent_invocation` | The request that started the invocation |
+| `agent_step` | One step, how it ended, and how long it took |
 | `model_call` | A model call and the tool calls it requested |
 | `tool_call` | An executed tool call — arguments, response, and MCP server URL |
-| `run_succeeded` | The run produced its reply |
-| `run_failed` | The run failed, with the failure kind and detail |
+| `invocation_succeeded` | The invocation produced its reply |
+| `invocation_failed` | The invocation failed, with the failure kind and detail |
 | `harness_exit` | The execution environment exited |
 
-`llm_call` and `tool_result` are the earlier names for `model_call` and
-`tool_call`; events recorded before the rename still carry them, so handle both.
+`llm_call`, `tool_result`, `run_succeeded`, and `run_failed` are the earlier
+names for `model_call`, `tool_call`, `invocation_succeeded`, and
+`invocation_failed`; events recorded before the rename still carry them, so
+handle both.
 
-Every event carries `session_id`, the `idempotency_key` of the run it belongs to,
-the `agent_revision` that ran, `event_time`, and a `payload` whose shape depends
-on `type`.
+Every event carries `session_id`, the `invocation_key` of the invocation it
+belongs to, the `agent_revision` that ran, `event_time`, and a `payload` whose
+shape depends on `type`.
 
 <Note>
 Model output, tool output, and tool arguments are stored up to 32 KiB each.
@@ -41,14 +48,17 @@ Alongside each value the event carries the complete value's byte count, SHA-256
 digest, and a truncation flag
 (`contentBytes`, `contentSha256`, `contentTruncated`), so you can tell a short
 answer from a truncated one. Payload keys are camelCase (`mcpServerUrl`,
-`toolCalls`).
+`toolCalls`). A `model_call`'s `request` is the input the model was given, so the
+final call of an invocation using `output_format` includes the turns Albus adds
+to obtain the JSON answer.
 </Note>
 
 ## What it answers
 
 ```bash
-# Why did this run fail?
-albus sessions audit support-1234 | jq '.events[] | select(.type=="run_failed")'
+# Why did this invocation fail?
+albus sessions audit support-1234 \
+  | jq '.events[] | select(.type=="invocation_failed" or .type=="run_failed")'
 
 # Which tools did the agent actually call, and with what?
 albus sessions audit support-1234 | jq '.events[] | select(.type=="tool_call") | {tool: .payload.name, args: .payload.args, server: .payload.mcpServerUrl}'
@@ -57,5 +67,6 @@ albus sessions audit support-1234 | jq '.events[] | select(.type=="tool_call") |
 albus sessions audit support-1234 | jq -r '.events[0].agent_revision'
 ```
 
-Filtering by run is a client-side filter on `idempotency_key` — the log is
-per-session, and the key is what identifies one invocation within it.
+Filtering by invocation is a client-side filter on `invocation_key` — the log is
+per-session, and the key is what identifies one invocation within it. That same
+key is what `GET /traces/{invocation_key}` reads the invocation back by.
