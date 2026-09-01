@@ -19,41 +19,49 @@ organization. Once the cap is reached, a run returns `429` and nothing executes:
 Email [carlo@albus.sh](mailto:carlo@albus.sh) to have the cap raised. Do not
 retry a `429` in a loop; it will not clear on its own.
 
-## No agent memory
+## No usage or spend surface
 
-An agent remembers nothing outside the session it is running in. Sessions do not
-share state, there is no cross-session store an agent can write to, and a run
-loads at most the session's 1000 most recent messages as history.
+Albus meters what your invocations spend, but there is no API or console page
+that reports usage, credits, or a bill yet, and nothing to top up. What you can
+read today is token usage on an invocation's trace — per attempt, and per span. Email [carlo@albus.sh](mailto:carlo@albus.sh) for anything else about
+consumption.
 
-Keep long-lived context in your own system and pass what matters in the prompt or
-the system prompt.
+## One invocation at a time per session
 
-## No code execution
+A session runs a single invocation at a time; a second one gets `423` until the
+first ends. Concurrency belongs across sessions — that is what caller-chosen
+session ids are for.
 
-The agent cannot run code, execute shell commands, or read and write files. Its
-capabilities are the built-in tools (`WEB_SEARCH`) and the tools exposed by the
-[MCP servers you declare](/guides/mcp-servers) — nothing else.
+A run also loads at most the session's 1000 most recent messages as history.
+Older turns fall out, so anything that has to survive them belongs in a [memory
+group](/guides/run-a-session#memory) or in your own system.
 
-## No execution durability
+## Retries are bounded, and a failed invocation is not resumed
 
-A run that fails is not resumed or retried. If the execution environment dies
-mid-run, the invocation fails and the work is lost; the API answers `502` with
-the failure kind and detail.
+Albus retries an invocation that crashes, up to three attempts. Past that the
+invocation fails and its work is lost; the API answers `502` with the failure
+kind and detail, and the attempts are on its trace.
 
-Retrying is your call: reusing the failed run's idempotency key re-attaches to it
-and returns the same failure, so start a new run with a **new** key. Keep runs
-short enough that losing one is cheap.
+Recovering from there is your call: reusing the failed invocation's key
+re-attaches to it and returns the same failure, so start a new run with a **new**
+key. Keep runs short enough that losing one is cheap.
 
-## Limited observability
+## Observability stops at your own invocations
 
-There is a [per-session audit log](/guides/audit-log) — model calls, tool calls
-and their output, and run outcomes — and that is the whole of it. There are no
-traces, no metrics, no dashboards, no alerting, and no cross-session search. Log
-what you need on your side, keyed by session id and idempotency key.
+[Traces](/guides/run-a-session#reading-an-invocation-back) cover invocations
+across sessions — filtered by agent, revision, status, session, and time, with
+each attempt's token usage — and the [per-session audit log](/guides/audit-log)
+records every model call and tool call with its payloads. What is not there:
+metrics, dashboards, alerting, and full-text search over payloads. Spans are also
+kept for 90 days from the invocation's start, after which the invocation stays
+readable and its spans do not.
+
+Neither traces nor memories have CLI commands yet — read them from the SDKs, over
+HTTP, or in the console.
 
 ## Roadmap
 
-Agent memory, code execution, richer agent observability, and durable execution
-are all post-beta work, along with a higher run cap. Tell
+A higher run cap, a usage and billing surface, richer observability, and durable
+execution are all post-beta work. Tell
 [carlo@albus.sh](mailto:carlo@albus.sh) which one blocks you — that is what
 orders the list.

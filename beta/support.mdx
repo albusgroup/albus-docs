@@ -21,9 +21,10 @@ albus sessions get support-1234
 albus sessions audit support-1234 --limit 50
 ```
 
-Send the session id, the idempotency key of the run (the `idempotency_key` field
-in the run's output), and the audit output. Between them they identify the run,
-the agent revision it used, and where it stopped.
+Send the session id, the invocation key of the run (the `invocation_key` field in
+the run's output), and the audit output. Between them they identify the run, the
+agent revision it used, and where it stopped — and the key is what reads its
+trace back, `GET /traces/{invocation_key}`.
 
 Never send an API key, a secret value, or a provider key. Albus never asks for
 one — secret values cannot be read back out of the API at all.

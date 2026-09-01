@@ -9,6 +9,8 @@ API operation and prints the JSON response on stdout, so output pipes into `jq`.
 
 ```bash
 albus sessions get my-session | jq '.messages[-1].content'
+albus sessions run my-session -p hello --agent-name demo --model gemini-3.6-flash \
+  | jq -r '.message.content'
 ```
 
 ## Global options
@@ -27,8 +29,8 @@ albus sessions get my-session | jq '.messages[-1].content'
 | `ALBUS_API_KEY` | CLI | Organization API key. Wins over a stored session. |
 | `ALBUS_BASE_URL` | CLI | Default API base URL. |
 | `ALBUS_CONFIG_DIR` | CLI | Where the browser session is stored. Falls back to `$XDG_CONFIG_HOME/albus`, then `~/.config/albus`. |
-| `ALBUS_API_KEY_AUTH` | SDKs | Organization API key. |
-| `ALBUS_BEARER_AUTH` | SDKs | User bearer token. |
+| `ALBUS_API_KEY` | SDKs | Organization API key, when the client is constructed with no credential. |
+| `ALBUS_BEARER_AUTH` | SDKs | User bearer token, likewise. |
 
 ## Authentication
 
@@ -36,16 +38,20 @@ albus sessions get my-session | jq '.messages[-1].content'
 albus login                # browser sign-in
 albus login --no-browser   # print the URL for you to open, and wait
 albus logout
-albus whoami               # requires the browser session
+albus whoami               # the caller the credential in effect authenticates
 albus status               # what credential is in effect, and whether it works
 albus health
 albus --version
 ```
 
+`albus whoami` sends whichever credential precedence resolves — an exported
+`ALBUS_API_KEY` first, then the stored session — and names what it
+authenticates: `user` for a session, `api_key` for a key.
+
 `albus status` prints JSON and exits 0 whether or not the credential works:
 `cli_version`, `base_url`, `credential` (`api_key`, `session`, or `none`),
-`authenticated`, plus `email` and `organizations` for a signed-in session and
-`error` for a credential Albus refused.
+`authenticated`, plus `caller` (the `/whoami` body) for a credential Albus
+accepted and `error` for one it refused.
 
 ## Sessions
 
@@ -66,10 +72,10 @@ albus sessions delete SESSION_ID
 | `--model` | Model identifier. Required unless `--agent-file` is given. |
 | `--provider` / `--credential` | Your own provider and its secret reference. Must be given together. |
 | `--system-prompt` | System instructions. |
-| `--tool` | A built-in tool the model may call. Repeat to allow several. |
+| `--tool` | A built-in tool the model may call — `web_search` or `terminal`. Repeat to allow several. |
 | `--max-steps` | Cap on model steps. |
 | `--agent-file` | JSON file holding the whole agent configuration. Cannot be combined with the options above. |
-| `--idempotency-key` | Makes the run retry-safe. |
+| `--invocation-key` | Names the invocation: makes the run retry-safe, and is what reads it back by key. |
 | `--wait` / `--no-wait` | Block for the reply (default) or return once accepted. |
 | `--wait-timeout` | Seconds to block server-side, up to `1800`. Omit for the server's 30-minute default. |
 
@@ -78,9 +84,26 @@ albus sessions delete SESSION_ID
 `--wait` alone omits the parameter and takes the server's 30-minute default, and
 `--no-wait` sends `0`, so the call returns once the invocation is accepted.
 
-`sessions run` prints the API response plus one key the CLI adds,
-`idempotency_key` — the effective key of the invocation, which you resend to
-re-attach to a run. See [Run a session](/guides/run-a-session).
+`sessions run` prints the API response — the `session` and the one `message`
+this invocation produced — plus one key the CLI adds, `invocation_key`: the
+effective key of the invocation, which you resend to re-attach to a run, and
+which `GET /traces/{invocation_key}` reads it back by. The whole conversation
+comes from `albus sessions get`, whose `messages` holds every turn. See [Run a
+session](/guides/run-a-session).
+
+<Note>
+Over HTTP the key travels as the `Idempotency-Key` header, which is the name it
+keeps in the API reference; the CLI and the SDKs call it the invocation key.
+</Note>
+
+## Models
+
+```bash
+albus models list
+```
+
+The models `--model` accepts, and the provider each runs on. See [Model
+providers](/guides/model-providers).
 
 ## Secrets
 
@@ -112,6 +135,11 @@ albus agents revision NAME REVISION
 ```
 
 See [Agents and revisions](/guides/agents-and-revisions).
+
+<Note>
+Traces and memories have no CLI commands yet — read them over HTTP, from the
+[SDKs](/reference/sdks#traces-memories-and-models), or in the console.
+</Note>
 
 ## API keys
 

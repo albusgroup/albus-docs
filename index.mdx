@@ -8,6 +8,11 @@ configuration, Albus executes the model loop in an isolated environment,
 connects the MCP servers you declare, and returns the assistant's reply. A
 session keeps its history, so the next prompt continues the conversation.
 
+The agent can search the web and run commands in a sandboxed terminal, remember
+what matters across sessions in a memory group, and answer in a JSON shape you
+specify. Every invocation is recorded as a trace — its steps, model calls, tool
+calls, and token usage — readable by the key you ran it with.
+
 <Note>
 Albus is in **private beta**, by invitation, with a cap of 20 session runs per
 organization. Read [what the private beta does not do
@@ -49,7 +54,8 @@ thing in Python, TypeScript, and cURL.
 
 <CardGroup cols={2}>
   <Card title="Run a session" icon="play" href="/guides/run-a-session">
-    Sessions, resuming, waiting, idempotency, and every failure mode.
+    Sessions, resuming, waiting, invocation keys, memory, traces, and every
+    failure mode.
   </Card>
   <Card title="Connect MCP servers" icon="plug" href="/guides/mcp-servers">
     Give an agent tools, with credentials stored as Albus secrets.

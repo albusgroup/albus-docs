@@ -23,12 +23,12 @@ Two carry more:
 | `400` | The request was rejected before anything ran: unknown tool name, malformed MCP server declaration, missing `model`, malformed secret reference, a `wait_timeout_seconds` above `1800`, or an invalid pagination cursor. | No | Correct the request. |
 | `401` | The credential is missing, malformed, or expired. | No | Send `Authorization: Bearer <credential>`. Mint a key with `albus tokens create`, or sign in again with `albus login`. |
 | `403` | Authenticated, but the account is not in the private beta (`"code": "not_provisioned"`). | No | [Request access](/getting-started/access). |
-| `404` | The session, secret, agent, revision, or token does not exist for this organization. | No | Check the identifier; `albus sessions list` / `albus secrets list` show what exists. |
+| `404` | The session, secret, agent, revision, token, invocation, or memory does not exist for this organization. | No | Check the identifier; `albus sessions list` / `albus secrets list` show what exists. |
 | `409` | The `Idempotency-Key` was already used for this session with a different body. | No | Use a new key, or resend the original body byte-for-byte. |
 | `423` | Another invocation is already running in this session. | Yes, after it finishes | Wait, re-send the running invocation's key to attach to it, or use a different session id. |
 | `429` | The organization has spent its private-beta invocation quota. | No | See [limitations](/beta/limitations); email carlo@albus.sh. |
-| `502` | The run itself failed. Body carries `message` and `kind`. | Yes, with a **new** key | Inspect [the audit log](/guides/audit-log) for `run_failed`. Reusing the failed key replays the failure. |
-| `503` | `GET /health` reports the service unavailable. | Yes | Retry; nothing to fix client-side. |
+| `502` | The run itself failed. Body carries `message` and `kind`. | Yes, with a **new** key | Inspect [the audit log](/guides/audit-log) for `invocation_failed`, or `GET /traces/{invocation_key}`, whose `failure` carries the same kind and detail. Reusing the failed key replays the failure. |
+| `503` | The service is unavailable — `GET /health`, or a trace read while its storage is unreachable, which may carry `Retry-After`. | Yes | Retry, honoring `Retry-After` when it is present. |
 | `504` | The `wait_timeout_seconds` you asked for elapsed. The run continues server-side. | Yes, with the **same** key | Re-send the same `Idempotency-Key` to re-attach, or poll `GET /sessions/{id}`. |
 
 A `504` is a server-side timeout with a JSON body, which is how you tell it apart
@@ -40,8 +40,11 @@ Albus accepts two credentials, both as `Authorization: Bearer <value>`:
 
 | Credential | Authorizes | Wrong credential gives |
 |---|---|---|
-| Organization API key (`POST /tokens`) | `/sessions`, `/secrets`, `/agents` | `401` on `/whoami`, `/tokens`, `/invites` |
-| User bearer token (browser sign-in) | Everything above plus `/whoami`, `/tokens`, `/invites` | — |
+| Organization API key (`POST /tokens`) | `/sessions`, `/secrets`, `/agents`, `/traces`, `/memories`, `/models`, and `/whoami` | `401` on `/tokens` and `/invites` |
+| User bearer token (browser sign-in) | Everything above plus `/tokens` and `/invites` | — |
+
+`/whoami` accepts either and names whichever signed the request: `user` for a
+bearer token, `api_key` for a key.
 
 `GET /health` needs no credential.
 
@@ -56,6 +59,11 @@ run against the quota.
 - New key while an invocation is running → `423`.
 - No key → a fresh invocation; the response's `Idempotency-Key` header carries
   the key the server assigned.
+
+The SDKs and the CLI call that key the invocation key (`invocation_key=`,
+`invocationKey:`, `--invocation-key`); over HTTP it is the `Idempotency-Key`
+header, and it is what `GET /traces/{invocation_key}` reads an invocation back
+by.
 
 ## In the SDKs
 

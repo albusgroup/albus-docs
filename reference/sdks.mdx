@@ -30,24 +30,24 @@ import os
 
 from albus_sdk import Albus
 
-# Organization API key — sessions, secrets, agents.
+# Organization API key — sessions, secrets, agents, traces, memories, models.
 with Albus(
-    api_key=os.environ["ALBUS_API_KEY_AUTH"],
+    api_key=os.environ["ALBUS_API_KEY"],
 ) as albus:
     print([session.id for session in albus.sessions.list_sessions().sessions])
 
-# User bearer token — /whoami and /tokens.
+# User bearer token — everything above, plus /tokens and /invites.
 with Albus(
     access_token=os.environ["ALBUS_BEARER_AUTH"],
 ) as albus:
-    print(albus.auth.whoami().email)
+    print(albus.auth.whoami().user.email)
 ```
 
 ```typescript TypeScript
 import { Albus } from "@albus-ts/sdk";
 
 const albus = new Albus({
-  security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
+  security: { apiKey: process.env.ALBUS_API_KEY ?? "" },
 });
 
 const { sessions } = await albus.sessions.listSessions();
@@ -58,16 +58,19 @@ console.log(sessions.map((session) => session.id));
 
 The two clients spell it differently: Python takes the credential directly
 (`api_key=` or `access_token=`, and supplying both raises `ValueError`), while
-TypeScript takes a `security` object (`apiKeyAuth` or `bearerAuth`). Constructed
-with no credential, both read `ALBUS_API_KEY_AUTH` and `ALBUS_BEARER_AUTH` from
-the environment. Note these are *not* the CLI's `ALBUS_API_KEY` — see
+TypeScript takes a `security` object (`apiKey` or `bearerAuth`). Constructed
+with no credential, both read `ALBUS_API_KEY` and `ALBUS_BEARER_AUTH` from
+the environment — the same `ALBUS_API_KEY` the CLI reads, see
 [Authenticate](/getting-started/authenticate).
+
+`whoami()` names whichever credential signed the request: `user` for a bearer
+token, `api_key` / `apiKey` for a key. The other is absent.
 
 ## Responses
 
 An operation with response headers you need returns them alongside the body:
 `response.result` is the parsed body and `response.headers` the headers. That is
-how you read the effective idempotency key of a run:
+how you read the effective invocation key of a run:
 
 ```python
 response = albus.sessions.run_session(
@@ -75,11 +78,53 @@ response = albus.sessions.run_session(
     user_prompt="summarize",
     agent_name="support-triage",
     agent={"model": {"name": "gemini-3.6-flash"}},
+    invocation_key="support-1234-summary-1",
     wait_timeout_seconds=120,
 )
 key = response.headers["idempotency-key"][0]
-reply = response.result.messages[-1].content
+reply = response.result.message.content
 ```
+
+A run returns the one message it produced, in `message` — absent when the
+invocation has not answered yet. `get_session` / `getSession` returns the
+session's history as `messages`.
+
+The key names an invocation in the SDKs (`invocation_key=`, `invocationKey:`)
+and travels as the HTTP `Idempotency-Key` header, which is why it is read back
+out of `response.headers`.
+
+## Traces, memories, and models
+
+Beyond sessions, secrets, agents, and tokens, both clients expose the
+invocations Albus recorded, the memories agents wrote, and the models it serves:
+
+```python
+traces = albus.traces.list_traces(agent_name="support-triage", limit=10)
+
+trace = albus.traces.get_trace(invocation_key="support-1234-summary-1")
+print(trace.result.status, len(trace.result.spans))
+for attempt in trace.result.attempts or []:
+    print(attempt.attempt, attempt.status, attempt.usage.total_tokens if attempt.usage else 0)
+
+memories = albus.memories.list_memories(group="support")
+albus.memories.delete_memory(group="support", id=memories.memories[0].id)
+
+print([(model.name, model.provider) for model in albus.models.list_models().models])
+```
+
+```typescript
+const { traces } = await albus.traces.listTraces({ agentName: "support-triage" });
+const trace = await albus.traces.getTrace({ invocationKey: "support-1234-summary-1" });
+
+const { memories } = await albus.memories.listMemories({ group: "support" });
+await albus.memories.deleteMemoryGroup({ group: "support" });
+```
+
+`get_trace` / `getTrace` pages spans with `after` and `limit`, returns only the
+latest attempt's spans unless you pass `attempts="all"`, and takes
+`payloads=False` for the shape of an invocation without its prompts and tool
+output — which raises the span limit to 500, so a whole trace usually fits in
+one request. See [the API reference](/reference/overview).
 
 ## Errors
 
@@ -91,7 +136,7 @@ Retries are configured on the client (`retry_config=`), and `run_session` takes 
 `retry_config=` of its own to override it for that call. When configured, the
 retried statuses are `429`, `500`, `502`, `503`, and `504`. Be careful combining
 that with a long-polling run: a `504` retry is a new request, so supply an
-idempotency key or you will start a second invocation.
+invocation key or you will start a second invocation.
 
 No other per-request transport arguments exist — the timeout, base URL, and extra
 headers are client-level (`timeout_ms=`, `server_url=`, and the HTTP client you
@@ -117,7 +162,7 @@ const response = await albus.sessions.runSession({
   },
 });
 
-console.log(response.result.messages.at(-1)?.content);
+console.log(response.result.message?.content);
 ```
 
 Pass `0` to return as soon as the invocation is accepted, then poll `getSession` /
@@ -141,8 +186,10 @@ Current floors for the examples on this page:
 |---|---|---|
 | `albus-sdk` | 0.8.0 | `api_key=` / `access_token=` replaced the `security=` constructor argument, which now raises `TypeError` |
 | `albus-sdk` | 0.8.1 | An omitted wait means 30 minutes rather than no wait, with a matching transport timeout |
+| `albus-sdk` | 0.11.0 | `traces`, `memories`, and `models`; `invocation_key=` replaced `idempotency_key=`; a run returns `message`, not `messages` |
 | `@albus-ts/sdk` | 0.5.0 | `waitTimeoutSeconds` — earlier versions cannot send the wait at all |
 | `@albus-ts/sdk` | 0.5.1 | The same 30-minute default and transport timeout |
+| `@albus-ts/sdk` | 0.8.0 | The same traces, memories, models, `invocationKey`, and `message` changes |
 
 Runtime requirements: Python 3.10+; for TypeScript, ECMAScript 2020+ — Node.js
 active or maintenance LTS (v18, v20), Bun 1+, or Deno 1.39+.

@@ -19,7 +19,7 @@ exactly. When you need me to sign in, print the URL and wait.
 
 That page is the whole procedure: install, `albus status`, `albus login
 --no-browser`, verify with `albus whoami`, one test run, then the SDK. It states
-the rules that matter — caller-chosen session ids, idempotency keys, secret
+the rules that matter — caller-chosen session ids, invocation keys, secret
 references, the 20-run private-beta cap — so the agent writes correct code
 instead of guessing.
 
@@ -27,7 +27,7 @@ instead of guessing.
 
 ```text
 Write a script that summarizes a support ticket with Albus. Use one session per
-ticket id, pass an idempotency key so retries are safe, and read
+ticket id, pass an invocation key so retries are safe, and read
 https://docs.albus.sh/guides/run-a-session.md first.
 ```
 

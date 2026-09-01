@@ -11,9 +11,10 @@ sent as `Authorization: Bearer <value>`:
 | **User session** | You | `albus login`, or signing in to the console |
 | **API key** | Your organization | `albus tokens create`, or the console |
 
-Sessions, secrets, and agents accept either. Operations that identify *you*
-rather than your organization — `/whoami` and everything under `/tokens` — accept
-the user session only.
+Sessions, secrets, agents, traces, memories, and models accept either, and so
+does `/whoami`, which names whichever of the two signed the request. Operations
+that act as *you* rather than as your organization — everything under `/tokens`,
+and `/invites` — accept the user session only.
 
 ## Sign in with a browser
 
@@ -94,7 +95,7 @@ import os
 from albus_sdk import Albus
 
 with Albus(
-    api_key=os.environ["ALBUS_API_KEY_AUTH"],
+    api_key=os.environ["ALBUS_API_KEY"],
 ) as albus:
     print(albus.sessions.list_sessions())
 ```
@@ -103,7 +104,7 @@ with Albus(
 import { Albus } from "@albus-ts/sdk";
 
 const albus = new Albus({
-  security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
+  security: { apiKey: process.env.ALBUS_API_KEY ?? "" },
 });
 
 console.log(await albus.sessions.listSessions());
@@ -118,16 +119,17 @@ curl --fail-with-body \
 </CodeGroup>
 
 <Note>
-The variable names differ by client: the CLI reads `ALBUS_API_KEY`, and the SDKs
-read `ALBUS_API_KEY_AUTH` (or `ALBUS_BEARER_AUTH` for a user token) when you
-construct the client with no credential. Export both, or pass the key explicitly
-— `api_key=` in Python, `security: { apiKeyAuth }` in TypeScript.
+One variable name for every client: the CLI and both SDKs read `ALBUS_API_KEY`,
+and the SDKs also read `ALBUS_BEARER_AUTH` for a user token. Constructed with no
+credential, an SDK takes them from the environment; otherwise pass the key
+explicitly — `api_key=` in Python, `security: { apiKey }` in TypeScript.
 </Note>
 
 In the CLI, an exported `ALBUS_API_KEY` **wins over a stored session**, so an
-agent or CI job never touches disk. `albus whoami` and `albus tokens` are the
-exception: they use the stored session even when a key is exported, because a
-key cannot identify you.
+agent or CI job never touches disk. `albus tokens` and `albus invites` are the
+exception: they use the stored session even when a key is exported, because a key
+cannot act as you. `albus whoami` follows the same precedence as everything else
+and names whichever credential it sent.
 
 ## Point at another API
 

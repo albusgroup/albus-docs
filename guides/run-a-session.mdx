@@ -31,8 +31,8 @@ had, and `session.state` is `RUNNING`, `DONE`, `FAILED`, or `CANCELED`.
 
 <Note>
 A run loads up to the session's most recent 1000 messages as history. Beyond
-that, older turns fall out. There is no memory beyond a session — see [private
-beta limitations](/beta/limitations).
+that, older turns fall out. To carry what an agent learned past one session, give
+it a [memory group](#memory).
 </Note>
 
 ## Waiting for the reply
@@ -40,7 +40,7 @@ beta limitations](/beta/limitations).
 A run is asynchronous underneath, with two ways to collect the result.
 
 **Wait (long-poll).** The request blocks until the assistant's reply exists and
-returns it in `messages`. This is the CLI default; over HTTP it is the
+returns it in `message`. This is the CLI default; over HTTP it is the
 `wait_timeout_seconds` query parameter.
 
 ```bash
@@ -63,7 +63,7 @@ curl --fail-with-body \
 
 `wait_timeout_seconds` bounds the wait server-side, in seconds, up to `1800`. If
 it elapses first the request fails with **`504`** and a JSON body — the run is
-still going, and retrying the same idempotency key re-attaches to it. Omit the
+still going, and retrying the same invocation key re-attaches to it. Omit the
 parameter and you get the maximum: 30 minutes. That is what the CLI sends for
 `--wait` without `--wait-timeout`, and what both SDKs send when you pass no wait.
 
@@ -76,20 +76,27 @@ albus sessions run support-1234 -p "summarize" \
 albus sessions get support-1234
 ```
 
-`sessions get` pages messages with `--after`/`--limit`; each message carries a
+A run returns the one message it produced, in `message`, and nothing when it has
+not answered yet. The session's whole history is `sessions get`, whose `messages`
+holds every turn: it pages with `--after`/`--limit`, and each message carries a
 monotonic `cursor`, so pass the last cursor you saw as `after` to fetch what is
 new.
 
-## Idempotency
+## The invocation key
 
-Supply an idempotency key and the run becomes retry-safe: a network failure,
-a `504`, or a lost response costs nothing.
+Name the invocation and the run becomes retry-safe: a network failure, a `504`,
+or a lost response costs nothing. The key is also how you read the invocation
+back afterwards.
 
 ```bash
 albus sessions run support-1234 -p "summarize" \
   --agent-name support-triage --model gemini-3.6-flash \
-  --idempotency-key "support-1234-summary-1"
+  --invocation-key "support-1234-summary-1"
 ```
+
+It is `--invocation-key` in the CLI, `invocation_key=` in Python,
+`invocationKey:` in TypeScript, and the `Idempotency-Key` header over HTTP — one
+value under two names, unique within your organization.
 
 | Situation | Result |
 |---|---|
@@ -99,8 +106,32 @@ albus sessions run support-1234 -p "summarize" \
 | No key | A fresh, non-retry-safe invocation; the server generates a key |
 
 The effective key always comes back — in the `Idempotency-Key` response header,
-and in the CLI's JSON output as `idempotency_key` — so you can reference or
+and in the CLI's JSON output as `invocation_key` — so you can reference or
 retry the invocation even when you did not supply one.
+
+### Reading an invocation back
+
+`GET /traces/{invocation_key}` returns the invocation itself: its status, when it
+ran, its token usage, and its **spans** — every step, model call, and tool call,
+with the payloads they carried. `GET /traces` lists invocations across sessions,
+newest first, filtered by `agent_name`, `agent_revision`, `status`, `session_id`,
+`since`, and `until`.
+
+```bash
+curl --fail-with-body \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  "https://albus.sh/api/traces?agent_name=support-triage&status=FAILED"
+
+curl --fail-with-body \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  "https://albus.sh/api/traces/support-1234-summary-1?payloads=false"
+```
+
+An invocation Albus retried has more than one attempt, and only the latest
+attempt's spans come back unless you ask for `attempts=all`; `attempts` lists
+every one with its own outcome and token usage. Spans are kept for 90 days from
+the invocation's start — past that `spans_expired` is true and the invocation
+itself stays readable. The console shows the same thing under **Traces**.
 
 ## Agent configuration
 
@@ -113,8 +144,18 @@ revisions](/guides/agents-and-revisions).
 {
   "model": { "name": "gemini-3.6-flash" },
   "system_prompt": "You triage support tickets. Be terse.",
-  "tools": ["WEB_SEARCH"],
+  "tools": { "web_search": {}, "terminal": {} },
+  "memory": { "group": "support", "generation": ["end_of_invocation"] },
   "max_steps": 12,
+  "output_format": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["summary", "severity"],
+    "properties": {
+      "summary": { "type": "string" },
+      "severity": { "type": "string", "enum": ["low", "high"] }
+    }
+  },
   "mcp_servers": [
     {
       "name": "github",
@@ -131,9 +172,43 @@ revisions](/guides/agents-and-revisions).
 | `model.name` | Model identifier, e.g. `gemini-3.6-flash`. Required. |
 | `model.provider` | Your own provider and credential. Omit to use the model Albus provides — see [model providers](/guides/model-providers). |
 | `system_prompt` | System instructions. A server default applies when omitted. Albus prefixes either with the current server date and time, so the model can answer time-sensitive questions. |
-| `tools` | Built-in tools the model may call. `WEB_SEARCH` is the only one in the private beta; an unknown name is rejected up front. |
+| `tools` | Built-in tools the model may call, as an object: include a tool's block to offer it, omit it to withhold it. `web_search` searches the web; `terminal` gives the model a persistent Linux sandbox to run commands in. An unknown name is rejected up front. |
+| `memory` | A [memory group](#memory) whose memories this agent reads and writes. |
 | `max_steps` | Cap on model steps before the run stops. |
 | `mcp_servers` | [MCP servers](/guides/mcp-servers) whose tools are offered to the model. |
+| `output_format` | JSON Schema the answer must conform to; the reply comes back as a JSON document. Every object in the schema must set `"additionalProperties": false` and list every property in `"required"`, and the model has to be one that supports structured output. |
+
+In the CLI, `--tool web_search --tool terminal` builds the `tools` object;
+`memory` and `output_format` go in an `--agent-file`.
+
+## Memory
+
+Give an agent a `memory` group and what it learns outlives the session. Every
+invocation configured with the same `group` reads the same memories, whichever
+session it runs in, and writes new ones at the `generation` points you list:
+`end_of_invocation` after the invocation answers, `agent` when the agent decides
+something is worth keeping.
+
+```json
+{ "group": "support", "generation": ["agent", "end_of_invocation"] }
+```
+
+A group is yours to scope — one per customer, per team, per agent. Read and prune
+it with the memories API, which lists a group newest first (both what agents
+currently read and what a later memory replaced), deletes one memory, or deletes
+the group:
+
+```bash
+curl --fail-with-body \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  "https://albus.sh/api/memories?group=support"
+
+curl --fail-with-body --request DELETE \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  "https://albus.sh/api/memories?group=support"
+```
+
+Deleting is permanent, and the console shows the same group under **Memories**.
 
 In the CLI, the common fields have flags (`--model`, `--system-prompt`, `--tool`,
 `--max-steps`, `--provider`, `--credential`). Anything else — MCP servers, a
@@ -159,18 +234,23 @@ Every one of these is a JSON body, not a bare status.
 | `400` | Invalid request — unknown tool, malformed MCP server, missing model | Fix the request; nothing ran |
 | `401` | Credential missing, expired, or wrong for this API | `albus login`, or check `ALBUS_API_KEY` and the base URL |
 | `403` `not_provisioned` | Account is not on the private-beta roster | [Request access](/getting-started/access) |
-| `409` | Idempotency key reused with a different body | Use a new key, or resend the original body |
+| `409` | Invocation key reused with a different body | Use a new key, or resend the original body |
 | `423` | Another invocation is already running in this session | Wait for it, or retry the running invocation's key |
 | `429` | Organization hit its run quota | 20 runs in the private beta — email [carlo@albus.sh](mailto:carlo@albus.sh) |
-| `502` | The run failed instead of replying | Body carries the failure kind and detail; check [the audit log](/guides/audit-log), then run again with a **new** idempotency key |
-| `504` | Timed out waiting for the reply | The run continues; retry the same idempotency key |
+| `502` | The run failed instead of replying | Body carries the failure kind and detail; check [the audit log](/guides/audit-log) or the invocation's trace, then run again with a **new** invocation key |
+| `504` | Timed out waiting for the reply | The run continues; retry the same invocation key |
 
 Note the difference between the two retries: reusing a key **re-attaches** to
 that invocation, so reusing the key of a failed run returns its failure again.
 Use the same key to recover a lost response (`504`, dropped connection), and a
-new key to actually run again. Albus does not retry a failed run for you — see
-[private beta limitations](/beta/limitations). Every status above is documented
-field by field in the [error reference](/reference/errors).
+new key to actually run again.
+
+Albus retries an invocation that crashes, up to three attempts, before reporting
+it failed, so a `502` means every attempt failed. The attempts before the last
+produced nothing that reached the reply, but they did spend tokens and their
+tool calls had their effects — `GET /traces/{invocation_key}` lists them. Every
+status above is documented field by field in the [error
+reference](/reference/errors).
 
 ## Clean up
 

@@ -115,7 +115,7 @@ import os
 from albus_sdk import Albus
 
 with Albus(
-    api_key=os.environ["ALBUS_API_KEY_AUTH"],
+    api_key=os.environ["ALBUS_API_KEY"],
 ) as albus:
     response = albus.sessions.run_session(
         id="repo-triage",
@@ -137,15 +137,14 @@ with Albus(
         wait_timeout_seconds=300,
     )
 
-    for message in response.result.messages:
-        print(f"{message.role}: {message.content}")
+    print(response.result.message.content)
 ```
 
 ```typescript TypeScript
 import { Albus } from "@albus-ts/sdk";
 
 const albus = new Albus({
-  security: { apiKeyAuth: process.env.ALBUS_API_KEY_AUTH ?? "" },
+  security: { apiKey: process.env.ALBUS_API_KEY ?? "" },
 });
 
 const response = await albus.sessions.runSession({
@@ -170,9 +169,7 @@ const response = await albus.sessions.runSession({
   },
 });
 
-for (const message of response.result.messages) {
-  console.log(`${message.role}: ${message.content}`);
-}
+console.log(response.result.message?.content);
 ```
 
 </CodeGroup>
@@ -185,7 +182,7 @@ for (const message of response.result.messages) {
 | The invocation fails at launch | A header reference names a secret that does not exist — references are resolved when the run starts, not when the request is validated |
 | The model never calls the tool | It is not in `allowed_tools`, or the prompt gives it no reason to |
 | The server rejects the calls | The header value is wrong — check it includes the scheme (for example `Bearer <token>`) the server expects; `albus secrets get <name>` shows the last three characters |
-| `502` mid-run | The run failed; `albus sessions audit <session>` shows the last `tool_call` and the failure |
+| `502` mid-run | Every attempt of the invocation failed; `GET /traces/{invocation_key}` and `albus sessions audit <session>` show the last `tool_call` and the failure |
 
 Header references are resolved for every run, so rotating the secret takes effect
 on the next run with no configuration change.

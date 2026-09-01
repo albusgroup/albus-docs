@@ -41,6 +41,10 @@ than per run or per customer — that is what makes the revision list a useful
 history instead of a list of one-offs. Session ids are where per-run identity
 belongs.
 
+It is also how you read a whole agent's history back rather than one session's:
+`GET /traces?agent_name=support-triage&agent_revision=<revision>` lists every
+invocation that ran that configuration, whichever session it ran in.
+
 Because a revision is derived from the configuration, it is also the safest thing
 to record in your own system: storing the revision with your result tells you
 later exactly what produced it, even after you have changed the agent.

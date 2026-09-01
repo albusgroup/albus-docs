@@ -21,9 +21,11 @@ exported and current, and whether the stored session is still good
 (`albus whoami`). Remember the CLI prefers an exported `ALBUS_API_KEY` over the
 stored session — an old key in your shell beats a fresh `albus login`.
 
-**`albus whoami` says to run `albus login` even though `ALBUS_API_KEY` is set**
-Expected. `whoami` and `tokens` identify *you*, and an organization API key
-cannot. Sign in.
+**`albus whoami` names an API key rather than me**
+Expected. `whoami` reports whichever credential precedence resolved, and an
+exported `ALBUS_API_KEY` wins over the stored session; unset it to be named as
+yourself. `tokens` and `invites` identify *you*, so they take the browser
+session only and refuse a key with `401`.
 
 **`no Auth0 tenant configured for <url>`**
 `albus login` has no sign-in configuration for that base URL. Check `--base-url`
@@ -43,10 +45,10 @@ answered instead — close it first.
 
 **`423` — another invocation is currently running**
 A session runs one invocation at a time. Wait for it, retry with the running
-invocation's idempotency key to attach to it, or use a different session id.
+invocation's key to attach to it, or use a different session id.
 Concurrency belongs across sessions, not within one.
 
-**`409` — idempotency key reused with a different body**
+**`409` — invocation key reused with a different body**
 The same key was already used for a different prompt or agent configuration.
 Use a new key, or resend exactly the original body.
 
@@ -56,19 +58,24 @@ Retrying will not help; email [carlo@albus.sh](mailto:carlo@albus.sh).
 
 **`504` — timed out waiting for the assistant response**
 Your `wait_timeout_seconds` elapsed (CLI: `--wait-timeout`); the run continues.
-Retry the **same** idempotency key to re-attach, or poll `albus sessions get`. Do
+Retry the **same** invocation key to re-attach, or poll `albus sessions get`. Do
 not start a new key — you would run the prompt twice.
 
 **`502` — the run failed instead of producing a response**
-The body carries the failure kind and detail. Look at
-`albus sessions audit <session>` for the last `model_call`/`tool_call` and the
-`run_failed` event. Then run again with a **new** idempotency key; reusing the
-failed key replays the failure.
+The body carries the failure kind and detail, and Albus already retried the
+invocation up to three times — every attempt failed. Look at
+`GET /traces/{invocation_key}` (with `attempts=all` for the earlier attempts), or
+at `albus sessions audit <session>` for the last `model_call`/`tool_call` and the
+`invocation_failed` event. Then run again with a **new** invocation key; reusing
+the failed key replays the failure.
 
 **`400` — invalid request**
 Something was rejected before anything ran: an unknown tool name, an MCP server
 with a missing, duplicated, or `__`-containing `name`, a `url` that is not an
-absolute http(s) URL, a missing `model`, or a malformed secret reference.
+absolute http(s) URL, a missing `model`, a model Albus does not serve
+(`albus models list`), an `output_format` schema that leaves
+`additionalProperties` unset or a property out of `required`, or a malformed
+secret reference.
 
 **The invocation fails immediately, with no model call in the audit log**
 A secret reference names a secret that does not exist. References are resolved
@@ -118,6 +125,6 @@ exported `ALBUS_API_KEY` avoids the disk entirely.
 
 ## Still stuck
 
-Collect `albus status`, the session id, the run's `idempotency_key`, and
+Collect `albus status`, the session id, the run's `invocation_key`, and
 `albus sessions audit <session-id>`, then email
 [carlo@albus.sh](mailto:carlo@albus.sh). Never include a key or secret value.
