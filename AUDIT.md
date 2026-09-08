@@ -23,9 +23,9 @@ Markers `{/* TODO(n): ... */}` in each page reference these numbers.
 1. Remove all private beta/alpha references; drop the `docs.json` banner, the "Private beta" nav group, and the `/alpha/*` redirects.
 2. Remove "Get access" (`getting-started/access.mdx`) and its nav entry.
 3. Remove "Install" (`getting-started/install.mdx`); fold the install one-liner into Authentication.
-4. Getting started = two pages: "Albus" (`index.mdx`) and "Authentication" (`getting-started/authenticate.mdx`). OPEN: where does `first-session.mdx` go — into `index.mdx`, or into `guides/run-a-session.mdx`?
-5. Remove the "For coding agents" group and `getting-started/for-your-agent.mdx`. OPEN: `agents/docs.mdx` is the exact URL the CLI prints for agents — keep it as a hidden (un-navigated) page, or delete and update the CLI?
-6. CLI reference — decision pending (see below).
+4. Getting started = two pages: "Albus" (`index.mdx`) and "Authentication" (`getting-started/authenticate.mdx`). DECIDED: merge `first-session.mdx` into `index.mdx`.
+5. Remove the "For coding agents" group and `getting-started/for-your-agent.mdx`. DECIDED: `agents/docs.mdx` stays live at its URL (the CLI prints it) but leaves the nav; strip beta wording.
+6. CLI reference — DECIDED: keep, trimmed to a command → flags table (see below).
 7. Remove "Documentation release policy" (`guides/releases.mdx`).
 8. Remove "API reference" (`reference/overview.mdx`); Reference group = SDKs, Errors (+ CLI if kept). The generated OpenAPI "API reference" group stays.
 9. Rename "Use your own model key" to "Bring your own key" (`guides/model-providers.mdx`).
