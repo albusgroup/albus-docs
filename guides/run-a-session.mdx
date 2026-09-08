@@ -3,6 +3,8 @@ title: Run a session
 description: Everything a session run does — identity, history, waiting, idempotency, agent configuration, and failure modes.
 ---
 
+{/* TODO(1): drop the 403 not_provisioned and 429 private-beta rows in the error table. */}
+
 Run an agent and collect its reply, from any client. One operation does it:
 `POST /sessions/{id}` (see the [API reference](/reference/overview)),
 `albus sessions run` in the CLI, `sessions.run_session` in Python,

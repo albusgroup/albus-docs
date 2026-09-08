@@ -16,6 +16,24 @@ Working branch for the docs audit. Not meant to merge as-is; this file is remove
 
 Devin sweeps the `TODO(carlo)` comments, applies the change, removes the marker, and replies on the PR with what was done per page.
 
+## Requested changes (round 1)
+
+Markers `{/* TODO(n): ... */}` in each page reference these numbers.
+
+1. Remove all private beta/alpha references; drop the `docs.json` banner, the "Private beta" nav group, and the `/alpha/*` redirects.
+2. Remove "Get access" (`getting-started/access.mdx`) and its nav entry.
+3. Remove "Install" (`getting-started/install.mdx`); fold the install one-liner into Authentication.
+4. Getting started = two pages: "Albus" (`index.mdx`) and "Authentication" (`getting-started/authenticate.mdx`). OPEN: where does `first-session.mdx` go — into `index.mdx`, or into `guides/run-a-session.mdx`?
+5. Remove the "For coding agents" group and `getting-started/for-your-agent.mdx`. OPEN: `agents/docs.mdx` is the exact URL the CLI prints for agents — keep it as a hidden (un-navigated) page, or delete and update the CLI?
+6. CLI reference — decision pending (see below).
+7. Remove "Documentation release policy" (`guides/releases.mdx`).
+8. Remove "API reference" (`reference/overview.mdx`); Reference group = SDKs, Errors (+ CLI if kept). The generated OpenAPI "API reference" group stays.
+9. Rename "Use your own model key" to "Bring your own key" (`guides/model-providers.mdx`).
+
+### On 6 (CLI reference)
+
+Recommendation: keep it, but make it lean. It is the only place flags, env vars, and exit codes are enumerated, and `albus login` is the only browser sign-in path, so Authentication will link into it. Cut the per-command prose down to a table (command → API operation → flags) and delete anything the `--help` output already says. If you'd rather drop it, the Authentication page needs to absorb `login`/`tokens create`, and the SDK page needs the `sessions run` example.
+
 ## Page checklist
 
 - [ ] index.mdx
