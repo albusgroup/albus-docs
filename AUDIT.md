@@ -36,14 +36,17 @@ Recommendation: keep it, but make it lean. It is the only place flags, env vars,
 
 ## Requested changes (round 2)
 
-10. Guides shrink to two. Guide 1, "Build an agent", is incremental: each step shows the previous code dimmed and the new lines in green prefixed with `+`, plus 1–2 sentences on what the addition changes in agent behavior. Steps:
+10. Guides shrink to: "Build an agent", "Bring your own key", "Built-in tools", "Troubleshooting". Guide 1, "Build an agent", is incremental: each step shows the previous code dimmed and the new lines in green prefixed with `+`, plus 1–2 sentences on what the addition changes in agent behavior. Steps:
     1. Simple agent — system prompt, user prompt, model; no tools.
     2. `invocation_key`; choosing a good session id and invocation key.
     3. `WEB_SEARCH` and `TERMINAL` tools.
-    4. Create a secret; add an MCP server that uses it.
-    5. Configure memory.
-    6. Every change is a new agent revision; view revisions in the CLI and the web UI.
-    Existing `run-a-session`, `secrets`, `mcp-servers`, `agents-and-revisions` fold into it. OPEN: `audit-log` — drop or fold into step 6? OPEN: `troubleshooting` is the URL the CLI prints on errors — keep live but out of the nav?
+    4. Limit the tools the agent can see.
+    5. Create a secret; add an MCP server that uses it.
+    6. Configure memory.
+    7. Tracing — read a trace to understand what the agent did; iterate on prompts and tool design.
+    8. Every change is a new agent revision; view revisions in the CLI and the web UI.
+    9. Audit log for security.
+    Existing `run-a-session`, `secrets`, `mcp-servers`, `agents-and-revisions`, `audit-log` fold into it. `troubleshooting` stays as a guide (the CLI prints its URL on errors).
 11. Guide 2, "Bring your own key" — point an agent at your own provider key (`guides/model-providers.mdx`, rewritten).
 12. "Built-in tools" reference page in Guides: Web search, Terminal, Memory (`guides/built-in-tools.mdx`, new).
 
