@@ -34,6 +34,19 @@ Markers `{/* TODO(n): ... */}` in each page reference these numbers.
 
 Recommendation: keep it, but make it lean. It is the only place flags, env vars, and exit codes are enumerated, and `albus login` is the only browser sign-in path, so Authentication will link into it. Cut the per-command prose down to a table (command → API operation → flags) and delete anything the `--help` output already says. If you'd rather drop it, the Authentication page needs to absorb `login`/`tokens create`, and the SDK page needs the `sessions run` example.
 
+## Requested changes (round 2)
+
+10. Guides shrink to two. Guide 1, "Build an agent", is incremental: each step shows the previous code dimmed and the new lines in green prefixed with `+`, plus 1–2 sentences on what the addition changes in agent behavior. Steps:
+    1. Simple agent — system prompt, user prompt, model; no tools.
+    2. `invocation_key`; choosing a good session id and invocation key.
+    3. `WEB_SEARCH` and `TERMINAL` tools.
+    4. Create a secret; add an MCP server that uses it.
+    5. Configure memory.
+    6. Every change is a new agent revision; view revisions in the CLI and the web UI.
+    Existing `run-a-session`, `secrets`, `mcp-servers`, `agents-and-revisions` fold into it. OPEN: `audit-log` — drop or fold into step 6? OPEN: `troubleshooting` is the URL the CLI prints on errors — keep live but out of the nav?
+11. Guide 2, "Bring your own key" — point an agent at your own provider key (`guides/model-providers.mdx`, rewritten).
+12. "Built-in tools" reference page in Guides: Web search, Terminal, Memory (`guides/built-in-tools.mdx`, new).
+
 ## Page checklist
 
 - [ ] index.mdx
