@@ -3,8 +3,6 @@ title: Albus
 description: Run agent sessions over an HTTP API — a CLI, two SDKs, MCP tools, and organization-scoped secrets.
 ---
 
-{/* TODO(1,4): remove the private-beta Note and the 'Get access' step; drop beta/limitations card. Getting started = this page + Authentication only. */}
-
 Run an agent session over an HTTP API: you send a prompt and an agent
 configuration, Albus executes the model loop in an isolated environment,
 connects the MCP servers you declare, and returns the assistant's reply. A
@@ -15,19 +13,9 @@ what matters across sessions in a memory group, and answer in a JSON shape you
 specify. Every invocation is recorded as a trace — its steps, model calls, tool
 calls, and token usage — readable by the key you ran it with.
 
-<Note>
-Albus is in **private beta**, by invitation, with a cap of 20 session runs per
-organization. Read [what the private beta does not do
-yet](/beta/limitations) before you build on it.
-</Note>
-
 ## Run your first session
 
 <Steps>
-  <Step title="Get access">
-    The private beta is invite-only. [Request
-    access](/getting-started/access).
-  </Step>
   <Step title="Install the CLI">
     ```bash
     curl -fsSL https://albus.sh/install.sh | sh
@@ -37,37 +25,155 @@ yet](/beta/limitations) before you build on it.
     ```bash
     albus login
     ```
+    Or [create an API key](/getting-started/authentication#create-an-api-key)
+    for scripts and SDKs.
   </Step>
   <Step title="Run">
-    ```bash
+    <CodeGroup>
+
+    ```bash CLI
     albus sessions run my-first-session \
       --prompt "In one sentence, what is a session?" \
       --agent-name demo \
       --model gemini-3.6-flash
     ```
+
+    ```python Python
+    import os
+
+    from albus_sdk import Albus
+
+    with Albus(
+        api_key=os.environ["ALBUS_API_KEY"],
+    ) as albus:
+        response = albus.sessions.run_session(
+            id="my-first-session",
+            user_prompt="In one sentence, what is a session?",
+            agent_name="demo",
+            agent={"model": {"name": "gemini-3.6-flash"}},
+            wait_timeout_seconds=120,
+        )
+
+        print(response.result.message.content)
+    ```
+
+    ```typescript TypeScript
+    import { Albus } from "@albus-ts/sdk";
+
+    const albus = new Albus({
+      security: { apiKey: process.env.ALBUS_API_KEY ?? "" },
+    });
+
+    const response = await albus.sessions.runSession({
+      id: "my-first-session",
+      waitTimeoutSeconds: 120,
+      body: {
+        userPrompt: "In one sentence, what is a session?",
+        agentName: "demo",
+        agent: { model: { name: "gemini-3.6-flash" } },
+      },
+    });
+
+    console.log(response.result.message?.content);
+    ```
+
+    ```bash cURL
+    curl --fail-with-body \
+      --request POST "https://albus.sh/api/sessions/my-first-session?wait_timeout_seconds=120" \
+      --header "Authorization: Bearer $ALBUS_API_KEY" \
+      --header "Content-Type: application/json" \
+      --header "Idempotency-Key: first-run-1" \
+      --data '{
+        "user_prompt": "In one sentence, what is a session?",
+        "agent_name": "demo",
+        "agent": { "model": { "name": "gemini-3.6-flash" } }
+      }'
+    ```
+
+    </CodeGroup>
   </Step>
 </Steps>
 
 No model API key of your own is needed for that run — Albus provides the default
-model. See [Run your first session](/getting-started/first-session) for the same
-thing in Python, TypeScript, and cURL.
+model. A session is a named conversation with an agent: you choose the
+identifier, and running the same identifier again continues the same
+conversation.
+
+<Note>
+The wait makes the request long-poll until the assistant's reply is available:
+`wait_timeout_seconds` over HTTP and in Python, `waitTimeoutSeconds` in
+TypeScript, `--wait-timeout` in the CLI. Omit it and you wait up to 30 minutes,
+the maximum; pass `0` to return as soon as the run is accepted.
+</Note>
+
+The response is the session and the one message this invocation produced:
+
+```json
+{
+  "session": {
+    "id": "my-first-session",
+    "state": "DONE",
+    "invocation_count": 1,
+    "agent_name": "demo",
+    "agent_revision": "b7f3c1a9d2",
+    "created_at": "2026-02-10T18:03:44Z",
+    "updated_at": "2026-02-10T18:03:51Z"
+  },
+  "message": {
+    "cursor": 2,
+    "invocation_key": "3f7c1e02-9a4b-4d81-b6de-5c2a70f18e44",
+    "role": "assistant",
+    "content": "A session is a named, ongoing conversation with an agent.",
+    "created_at": "2026-02-10T18:03:51Z"
+  }
+}
+```
+
+`message` is the assistant's reply, and is absent when the invocation has not
+answered yet — `wait_timeout_seconds=0`, or a wait that returned first. The whole
+conversation comes from `GET /sessions/{id}`, whose `messages` array holds every
+turn. The CLI prints the same object plus the run's `invocation_key`, taken from
+the response header.
+
+## Continue the conversation
+
+Run the same session identifier again. The agent sees the earlier turns.
+
+```bash
+albus sessions run my-first-session \
+  --prompt "Now say that again in five words." \
+  --agent-name demo \
+  --model gemini-3.6-flash
+```
+
+## Read it back
+
+```bash
+albus sessions list
+albus sessions get my-first-session
+albus sessions audit my-first-session --limit 20
+```
+
+`get` returns the messages; `audit` returns what happened inside the runs —
+model calls, tool calls, and outcomes. `GET /traces/{invocation_key}` returns
+the same invocation as spans, with token usage, and the console shows it under
+**Traces**.
 
 ## Next
 
 <CardGroup cols={2}>
-  <Card title="Run a session" icon="play" href="/guides/run-a-session">
-    Sessions, resuming, waiting, invocation keys, memory, traces, and every
-    failure mode.
+  <Card title="Build an agent" icon="layer-group" href="/guides/build-an-agent">
+    From a bare model to tools, secrets, MCP servers, memory, traces, revisions,
+    and the audit log — one step at a time.
   </Card>
-  <Card title="Connect MCP servers" icon="plug" href="/guides/mcp-servers">
-    Give an agent tools, with credentials stored as Albus secrets.
+  <Card title="Bring your own key" icon="key" href="/guides/bring-your-own-key">
+    Run on your own model provider account.
   </Card>
-  <Card title="Albus for coding agents" icon="robot" href="/agents/docs">
-    Setup, the whole API surface, and examples — one page to hand to Codex,
-    Claude Code, or Cursor.
+  <Card title="Built-in tools" icon="toolbox" href="/guides/built-in-tools">
+    Web search, the terminal sandbox, and memory.
   </Card>
-  <Card title="Private beta limitations" icon="triangle-exclamation" href="/beta/limitations">
-    What is not there yet, and what to design around.
+  <Card title="SDKs" icon="code" href="/reference/sdks">
+    The Python and TypeScript clients.
   </Card>
 </CardGroup>
 

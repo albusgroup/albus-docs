@@ -1,71 +1,49 @@
 ---
 title: CLI reference
-description: Every albus command, flag, and environment variable.
+description: Every albus command, flag, environment variable, and exit code.
 ---
 
-{/* TODO(6): decide whether to keep. Recommendation below in AUDIT.md. */}
-
-Look up an `albus` command, flag, or environment variable. The CLI is a thin shell
-over the [Python SDK](/reference/sdks): each command that calls Albus maps to one
-API operation and prints the JSON response on stdout, so output pipes into `jq`.
+The CLI is a thin shell over the [Python SDK](/reference/sdks): each command
+that calls Albus maps to one API operation and prints the JSON response on
+stdout, so output pipes into `jq`. `--help` on any command lists its options.
 
 ```bash
 albus sessions get my-session | jq '.messages[-1].content'
-albus sessions run my-session -p hello --agent-name demo --model gemini-3.6-flash \
-  | jq -r '.message.content'
 ```
 
-## Global options
+## Commands
 
-| Option | Meaning |
-|---|---|
-| `--base-url` | API base URL. Overrides `ALBUS_BASE_URL`; defaults to `https://albus.sh/api`. |
-| `--timeout` | Per-request timeout in seconds (default 30). A waiting `sessions run` long-polls and is exempt. |
-| `--version` | Print the CLI version. |
-| `--help` | Available on every command and subcommand. |
-
-## Environment
-
-| Variable | Read by | Meaning |
+| Command | API operation | Notes |
 |---|---|---|
-| `ALBUS_API_KEY` | CLI | Organization API key. Wins over a stored session. |
-| `ALBUS_BASE_URL` | CLI | Default API base URL. |
-| `ALBUS_CONFIG_DIR` | CLI | Where the browser session is stored. Falls back to `$XDG_CONFIG_HOME/albus`, then `~/.config/albus`. |
-| `ALBUS_API_KEY` | SDKs | Organization API key, when the client is constructed with no credential. |
-| `ALBUS_BEARER_AUTH` | SDKs | User bearer token, likewise. |
+| `albus login [--no-browser]` | — | Browser sign-in; `--no-browser` prints the URL and waits |
+| `albus logout` | — | Forget the stored session |
+| `albus whoami` | `GET /whoami` | Names what the credential in effect authenticates: `user` or `api_key` |
+| `albus status` | `GET /whoami` | JSON: `cli_version`, `base_url`, `credential`, `authenticated`, `caller` or `error`; exits `0` either way |
+| `albus health` | `GET /health` | |
+| `albus sessions run ID -p TEXT --agent-name NAME …` | `POST /sessions/{id}` | Options below; prints the response plus `invocation_key` |
+| `albus sessions list` | `GET /sessions` | |
+| `albus sessions get ID [--after C] [--limit N]` | `GET /sessions/{id}` | The conversation; limit defaults to 100 |
+| `albus sessions audit ID [--after C] [--limit N]` | `GET /sessions/{id}/audit` | The [audit log](/guides/build-an-agent#9-the-audit-log) |
+| `albus sessions delete ID` | `DELETE /sessions/{id}` | |
+| `albus agents list` | `GET /agents` | |
+| `albus agents get NAME` | `GET /agents/{name}` | Current configuration plus every [revision](/guides/build-an-agent#8-every-change-is-a-revision) |
+| `albus agents revision NAME REVISION` | `GET /agents/{name}/revisions/{revision}` | One revision's configuration |
+| `albus models list` | `GET /models` | The models Albus serves, and the provider of each |
+| `albus secrets list` | `GET /secrets` | |
+| `albus secrets create NAME [--value V]` | `POST /secrets` | Omit `--value` to read stdin |
+| `albus secrets get NAME` | `GET /secrets/{name}` | Masked |
+| `albus secrets update NAME [--value V]` | `PUT /secrets/{name}` | Rotation; no configuration change |
+| `albus secrets delete NAME` | `DELETE /secrets/{name}` | |
+| `albus tokens list` | `GET /tokens` | Browser session only |
+| `albus tokens create NAME` | `POST /tokens` | Prints the only copy of the key |
+| `albus tokens get ID` | `GET /tokens/{id}` | |
+| `albus tokens delete ID` | `DELETE /tokens/{id}` | |
+| `albus invites create EMAIL` | `POST /invites` | Browser session only |
 
-## Authentication
+Traces and memories have no CLI commands yet — read them over HTTP, from the
+[SDKs](/reference/sdks#traces-memories-and-models), or in the console.
 
-```bash
-albus login                # browser sign-in
-albus login --no-browser   # print the URL for you to open, and wait
-albus logout
-albus whoami               # the caller the credential in effect authenticates
-albus status               # what credential is in effect, and whether it works
-albus health
-albus --version
-```
-
-`albus whoami` sends whichever credential precedence resolves — an exported
-`ALBUS_API_KEY` first, then the stored session — and names what it
-authenticates: `user` for a session, `api_key` for a key.
-
-`albus status` prints JSON and exits 0 whether or not the credential works:
-`cli_version`, `base_url`, `credential` (`api_key`, `session`, or `none`),
-`authenticated`, plus `caller` (the `/whoami` body) for a credential Albus
-accepted and `error` for one it refused.
-
-## Sessions
-
-```bash
-albus sessions run SESSION_ID --prompt TEXT --agent-name NAME [options]
-albus sessions list
-albus sessions get SESSION_ID [--after CURSOR] [--limit N]     # limit defaults to 100
-albus sessions audit SESSION_ID [--after CURSOR] [--limit N]   # limit defaults to 100
-albus sessions delete SESSION_ID
-```
-
-`sessions run` options:
+### `sessions run` options
 
 | Option | Meaning |
 |---|---|
@@ -74,86 +52,29 @@ albus sessions delete SESSION_ID
 | `--model` | Model identifier. Required unless `--agent-file` is given. |
 | `--provider` / `--credential` | Your own provider and its secret reference. Must be given together. |
 | `--system-prompt` | System instructions. |
-| `--tool` | A built-in tool the model may call — `web_search` or `terminal`. Repeat to allow several. |
+| `--tool` | A built-in tool — `web_search` or `terminal`. Repeat to allow several. |
 | `--max-steps` | Cap on model steps. |
 | `--agent-file` | JSON file holding the whole agent configuration. Cannot be combined with the options above. |
-| `--invocation-key` | Names the invocation: makes the run retry-safe, and is what reads it back by key. |
-| `--wait` / `--no-wait` | Block for the reply (default) or return once accepted. |
-| `--wait-timeout` | Seconds to block server-side, up to `1800`. Omit for the server's 30-minute default. |
+| `--invocation-key` | Names the invocation; the `Idempotency-Key` header over HTTP. |
+| `--wait` / `--no-wait` | Block for the reply (default) or return once accepted (`wait_timeout_seconds=0`). |
+| `--wait-timeout` | Seconds to block server-side, up to `1800`. Omit for the 30-minute maximum. |
 
-`--wait` and `--wait-timeout` are the CLI's spelling of the API's
-`wait_timeout_seconds` query parameter: `--wait --wait-timeout 120` sends `120`,
-`--wait` alone omits the parameter and takes the server's 30-minute default, and
-`--no-wait` sends `0`, so the call returns once the invocation is accepted.
+## Global options
 
-`sessions run` prints the API response — the `session` and the one `message`
-this invocation produced — plus one key the CLI adds, `invocation_key`: the
-effective key of the invocation, which you resend to re-attach to a run, and
-which `GET /traces/{invocation_key}` reads it back by. The whole conversation
-comes from `albus sessions get`, whose `messages` holds every turn. See [Run a
-session](/guides/run-a-session).
+| Option | Meaning |
+|---|---|
+| `--base-url` | API base URL. Overrides `ALBUS_BASE_URL`; defaults to `https://albus.sh/api`. |
+| `--timeout` | Per-request timeout in seconds (default 30). A waiting `sessions run` is exempt. |
+| `--version` | Print the CLI version. |
 
-<Note>
-Over HTTP the key travels as the `Idempotency-Key` header, which is the name it
-keeps in the API reference; the CLI and the SDKs call it the invocation key.
-</Note>
+## Environment
 
-## Models
-
-```bash
-albus models list
-```
-
-The models `--model` accepts, and the provider each runs on. See [Model
-providers](/guides/model-providers).
-
-## Secrets
-
-```bash
-albus secrets list
-albus secrets create NAME [--value VALUE]   # omit --value to read stdin
-albus secrets get NAME                      # masked
-albus secrets update NAME [--value VALUE]
-albus secrets delete NAME
-```
-
-See [Secrets](/guides/secrets).
-
-## Invites
-
-```bash
-albus invites create EMAIL
-```
-
-Invites a person by email; they get their own organization when they first sign
-in. Needs the browser session, like `tokens`.
-
-## Agents
-
-```bash
-albus agents list
-albus agents get NAME
-albus agents revision NAME REVISION
-```
-
-See [Agents and revisions](/guides/agents-and-revisions).
-
-<Note>
-Traces and memories have no CLI commands yet — read them over HTTP, from the
-[SDKs](/reference/sdks#traces-memories-and-models), or in the console.
-</Note>
-
-## API keys
-
-```bash
-albus tokens list
-albus tokens create NAME    # prints the only copy of the value
-albus tokens get ID
-albus tokens delete ID
-```
-
-`tokens` requires the browser session, since minting a key identifies you. See
-[Authenticate](/getting-started/authenticate).
+| Variable | Read by | Meaning |
+|---|---|---|
+| `ALBUS_API_KEY` | CLI, SDKs | Organization API key. In the CLI it wins over a stored session, except for `tokens` and `invites`. |
+| `ALBUS_BASE_URL` | CLI | Default API base URL. Credentials are stored per base URL. |
+| `ALBUS_CONFIG_DIR` | CLI | Where the browser session is stored. Falls back to `$XDG_CONFIG_HOME/albus`, then `~/.config/albus`. |
+| `ALBUS_BEARER_AUTH` | SDKs | User bearer token, when the client is constructed with no credential. |
 
 ## Exit codes
 

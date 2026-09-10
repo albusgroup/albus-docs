@@ -3,8 +3,6 @@ title: Albus for coding agents
 description: "One page: what Albus is, how to set it up, the whole API surface, the rules, and runnable examples."
 ---
 
-{/* TODO(1,5): remove 'Private-beta limits' section, 403 not_provisioned and 20-run wording; page leaves the nav (see TODO(5) in for-your-agent). */}
-
 {/* This page is the canonical target for "read this and use Albus": it is what
     the CLI prints, and it is meant to be read whole by a machine. Keep it
     imperative, complete, and self-sufficient — an agent that reads only this
@@ -18,15 +16,12 @@ returns the assistant's reply.
 You are probably reading this to set Albus up for the user of this machine, or to
 write code against it. Both are below, in order. Do not skip verification.
 
-## Private-beta limits
+## Limits
 
 Read these before designing anything.
 
-- **20 session runs per organization**, ever, in the private beta. `429` means the
-  cap is spent. Never retry a run in a loop.
-- **Access is by invitation.** A `403` naming `not_provisioned` means the account
-  is not enabled: stop and tell the user to email carlo@albus.sh with the Google
-  address they sign in with.
+- **Runs are limited per organization.** `429` means the limit is reached.
+  Never retry a run in a loop.
 - **One invocation per session at a time.** A second one gets `423`. Concurrency
   lives across session ids.
 - **Bounded retries.** Albus retries a crashed invocation up to three attempts;
@@ -35,8 +30,6 @@ Read these before designing anything.
   from per-invocation token usage on traces.
 - **Observability is traces plus the per-session audit log** — no metrics,
   dashboards, or alerting. Trace spans are kept for 90 days.
-
-Full detail: [private-beta limitations](/beta/limitations).
 
 ## Setup
 
@@ -111,14 +104,12 @@ albus whoami
 ```
 
 JSON naming the caller means setup is complete: `whoami` accepts either
-credential and reports which one signed the request. An error naming the Albus
-beta means the account is not provisioned — stop, and tell the user to email
-carlo@albus.sh.
+credential and reports which one signed the request.
 
 ### 5. Run one session
 
-Do this once, to prove the setup end to end. It spends one of the organization's
-20 private-beta runs, so run it once and do not loop.
+Do this once, to prove the setup end to end. It spends a run, so run it once
+and do not loop.
 
 ```bash
 albus sessions run setup-check \
@@ -226,11 +217,11 @@ Idempotency-Key: support-1234-summary-v1
   31-minute transport timeout, so a waiting run needs no client configuration.
 - Omitting `agent.model.provider` uses the model credential Albus supplies, which
   is what a first run should do. To bring your own, store it as a secret and
-  reference it — see [model providers](/guides/model-providers).
+  reference it — see [Bring your own key](/guides/bring-your-own-key).
 - `mcp_servers` requires a Streamable HTTP MCP endpoint. `allowed_tools` names
   tools as the server names them; the agent sees them prefixed, as
   `github__search_issues`. Omit it to allow every tool the server exposes. See
-  [MCP servers](/guides/mcp-servers).
+  [Build an agent](/guides/build-an-agent#5-add-a-secret-and-an-mcp-server).
 - `tools` is an object, not a list: include a tool's block to offer it, omit it
   to withhold it. `web_search` searches the web, `terminal` gives the model a
   persistent Linux sandbox to run commands in.
@@ -267,11 +258,10 @@ List filters: `agent_name`, `agent_revision`, `status`, `session_id`, `since`,
 |---|---|---|
 | `400` | The agent configuration or prompt is invalid | Fix the request; do not retry as-is |
 | `401` | Credential rejected | `albus status`, then re-authenticate |
-| `403` | Not provisioned for the private beta | Stop; the user emails carlo@albus.sh |
 | `404` | No such session, secret, agent, revision, or token | Check the identifier |
 | `409` | The invocation key was reused with a different body | Use a new key, or resend the original body |
 | `423` | Another invocation is running in that session | Wait, re-send the running key to attach, or use a different session id |
-| `429` | The organization's 20 runs are spent | Stop; the user emails carlo@albus.sh |
+| `429` | The organization's run limit is reached | Stop; the user emails carlo@albus.sh to raise it |
 | `502` | Every attempt of the invocation failed | Read `GET /traces/{invocation_key}` or `albus sessions audit ID`; a new invocation key reruns it |
 | `504` | The wait elapsed, the run continues | Re-send with the **same** invocation key, or poll |
 
@@ -387,7 +377,7 @@ with Albus(
             break
         except errors.AlbusError as error:
             # 504: the run is still going — the same key re-attaches to it.
-            # 429: the private-beta quota is spent; retrying will not help.
+            # 429: the organization's run limit is reached; retrying will not help.
             if error.status_code != 504:
                 raise
     else:
@@ -458,7 +448,7 @@ with Albus(api_key=os.environ["ALBUS_API_KEY"]) as albus:
         print(span.id, span.type, span.name, span.status)
 ```
 
-The [audit log](/guides/audit-log) is what happened inside one session's runs,
+The [audit log](/guides/build-an-agent#9-the-audit-log) is what happened inside one session's runs,
 and traces are the same events across sessions with each attempt's token usage;
 `agents revision` is the exact configuration that ran it.
 
@@ -499,8 +489,7 @@ asyncio.run(main())
 ```
 
 <Warning>
-Each run spends one of the organization's 20 private-beta runs. Fan out
-deliberately.
+Each run counts against the organization's run limit. Fan out deliberately.
 </Warning>
 
 ## Where the rest of the documentation is
@@ -511,15 +500,11 @@ Any page is markdown at the same URL with `.md` appended.
 |---|---|
 | Full index, machine-readable | https://docs.albus.sh/llms.txt |
 | Whole corpus, one file | https://docs.albus.sh/llms-full.txt |
-| Running sessions in depth | https://docs.albus.sh/guides/run-a-session.md |
-| MCP servers and their secrets | https://docs.albus.sh/guides/mcp-servers.md |
-| Secrets | https://docs.albus.sh/guides/secrets.md |
-| Bringing your own model key | https://docs.albus.sh/guides/model-providers.md |
-| The audit log | https://docs.albus.sh/guides/audit-log.md |
-| Traces, memory, and structured output | https://docs.albus.sh/guides/run-a-session.md |
+| Building an agent step by step: invocation keys, tools, secrets, MCP servers, memory, traces, revisions, audit log | https://docs.albus.sh/guides/build-an-agent.md |
+| Web search, terminal, and memory | https://docs.albus.sh/guides/built-in-tools.md |
+| Bringing your own model key | https://docs.albus.sh/guides/bring-your-own-key.md |
 | Errors and fixes | https://docs.albus.sh/guides/troubleshooting.md |
 | Status codes and bodies | https://docs.albus.sh/reference/errors.md |
 | CLI reference | https://docs.albus.sh/reference/cli.md |
 | SDK reference | https://docs.albus.sh/reference/sdks.md |
 | HTTP contract | https://docs.albus.sh/openapi/openapi.yaml |
-| What the private beta cannot do | https://docs.albus.sh/beta/limitations.md |
