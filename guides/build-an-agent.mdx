@@ -566,7 +566,7 @@ albus sessions audit support-1234 | jq '.events[]
 albus sessions audit support-1234 | jq -r '.events[0].agent_revision'
 
 # Why did an invocation fail?
-albus sessions audit support-1234 | jq '.events[] | select(.type=="invocation_failed")'
+albus sessions audit support-1234 | jq '.events[] | select(.type=="invocation_failed" or .type=="run_failed")'
 ```
 
 Page with `--after`/`--limit` (default 100), passing the response's
