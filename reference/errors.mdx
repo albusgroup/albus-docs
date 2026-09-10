@@ -10,11 +10,7 @@ JSON. Most carry a single field:
 { "message": "another invocation is currently running" }
 ```
 
-Two carry more:
-
-- `403` from an account outside the private beta adds
-  `"code": "not_provisioned"`.
-- `502` from a failed run adds `"kind"`, naming the failure class.
+A `502` from a failed run adds `"kind"`, naming the failure class.
 
 ## Status codes
 
@@ -22,12 +18,11 @@ Two carry more:
 |---|---|---|---|
 | `400` | The request was rejected before anything ran: unknown tool name, malformed MCP server declaration, missing `model`, malformed secret reference, a `wait_timeout_seconds` above `1800`, or an invalid pagination cursor. | No | Correct the request. |
 | `401` | The credential is missing, malformed, or expired. | No | Send `Authorization: Bearer <credential>`. Mint a key with `albus tokens create`, or sign in again with `albus login`. |
-| `403` | Authenticated, but the account is not in the private beta (`"code": "not_provisioned"`). | No | [Request access](/getting-started/access). |
 | `404` | The session, secret, agent, revision, token, invocation, or memory does not exist for this organization. | No | Check the identifier; `albus sessions list` / `albus secrets list` show what exists. |
 | `409` | The `Idempotency-Key` was already used for this session with a different body. | No | Use a new key, or resend the original body byte-for-byte. |
 | `423` | Another invocation is already running in this session. | Yes, after it finishes | Wait, re-send the running invocation's key to attach to it, or use a different session id. |
-| `429` | The organization has spent its private-beta invocation quota. | No | See [limitations](/beta/limitations); email carlo@albus.sh. |
-| `502` | The run itself failed. Body carries `message` and `kind`. | Yes, with a **new** key | Inspect [the audit log](/guides/audit-log) for `invocation_failed`, or `GET /traces/{invocation_key}`, whose `failure` carries the same kind and detail. Reusing the failed key replays the failure. |
+| `429` | The organization has reached its run limit. | No | Email carlo@albus.sh to raise it. |
+| `502` | The run itself failed. Body carries `message` and `kind`. | Yes, with a **new** key | Inspect [the audit log](/guides/build-an-agent#9-the-audit-log) for `invocation_failed`, or `GET /traces/{invocation_key}`, whose `failure` carries the same kind and detail. Reusing the failed key replays the failure. |
 | `503` | The service is unavailable — `GET /health`, or a trace read while its storage is unreachable, which may carry `Retry-After`. | Yes | Retry, honoring `Retry-After` when it is present. |
 | `504` | The `wait_timeout_seconds` you asked for elapsed. The run continues server-side. | Yes, with the **same** key | Re-send the same `Idempotency-Key` to re-attach, or poll `GET /sessions/{id}`. |
 
@@ -52,7 +47,7 @@ bearer token, `api_key` for a key.
 
 Every retry of an invocation must carry the `Idempotency-Key` of the invocation
 it retries. Without a key, a retry is a second invocation, and it spends a second
-run against the quota.
+run.
 
 - Same key, identical body → re-attaches to the invocation.
 - Same key, different body → `409`.

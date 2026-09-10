@@ -1,0 +1,590 @@
+---
+title: Build an agent
+description: From a bare model to tools, secrets, MCP servers, memory, traces, revisions, and the audit log — one addition at a time.
+---
+
+Build an agent by adding one thing at a time to the same call. Every step below
+is `POST /sessions/{id}` — `albus sessions run` in the CLI,
+`sessions.run_session` in Python, `sessions.runSession` in TypeScript — with a
+little more in the `agent` object. Each step shows the previous code with the
+new lines marked `+`, and says what the addition changes about how the agent
+behaves.
+
+The examples use the Python SDK and, alongside it, the JSON agent file the CLI
+takes with `--agent-file`. The field names are the same in both.
+
+## 1. Run a simple agent
+
+The smallest agent is a model, a system prompt, and a user prompt. No tools:
+the model answers from what it knows, and the reply is the whole result.
+
+<CodeGroup>
+
+```python Python
+import os
+
+from albus_sdk import Albus
+
+with Albus(api_key=os.environ["ALBUS_API_KEY"]) as albus:
+    response = albus.sessions.run_session(
+        id="support-1234",
+        agent_name="support-triage",
+        user_prompt="Customer says login fails after the password reset. Triage it.",
+        agent={
+            "model": {"name": "gemini-3.6-flash"},
+            "system_prompt": "You triage support tickets. Be terse.",
+        },
+        wait_timeout_seconds=120,
+    )
+    print(response.result.message.content)
+```
+
+```json agent.json
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "system_prompt": "You triage support tickets. Be terse."
+}
+```
+
+```bash CLI
+albus sessions run support-1234 \
+  --prompt "Customer says login fails after the password reset. Triage it." \
+  --agent-name support-triage \
+  --agent-file agent.json
+```
+
+</CodeGroup>
+
+Three names matter here. `id` is the **session**: a conversation you name, which
+Albus creates on the first run and continues on every later one, so the next
+prompt to `support-1234` sees this one. `agent_name` groups runs into an
+**agent**, and the `agent` object is its configuration. Albus supplies the
+model — no provider key of your own is needed until you [bring your
+own](/guides/bring-your-own-key). `system_prompt` is prefixed with the current
+date and time, so the model can answer time-sensitive questions; omit it and a
+server default applies.
+
+## 2. Make the run retry-safe
+
+Add an `invocation_key`. The call becomes idempotent: a network failure, a
+`504` from a long wait, or a lost response costs nothing, because retrying the
+same key re-attaches to the same run instead of starting another.
+
+<CodeGroup>
+
+```python Python focus={9}
+import os
+
+from albus_sdk import Albus
+
+with Albus(api_key=os.environ["ALBUS_API_KEY"]) as albus:
+    response = albus.sessions.run_session(
+        id="support-1234",
+        agent_name="support-triage",
+        invocation_key="support-1234-triage-1",  # [!code ++]
+        user_prompt="Customer says login fails after the password reset. Triage it.",
+        agent={
+            "model": {"name": "gemini-3.6-flash"},
+            "system_prompt": "You triage support tickets. Be terse.",
+        },
+        wait_timeout_seconds=120,
+    )
+    print(response.result.message.content)
+```
+
+```bash CLI focus={5}
+albus sessions run support-1234 \
+  --prompt "Customer says login fails after the password reset. Triage it." \
+  --agent-name support-triage \
+  --agent-file agent.json \
+  --invocation-key support-1234-triage-1 # [!code ++]
+```
+
+</CodeGroup>
+
+Over HTTP the same value travels as the `Idempotency-Key` header; in TypeScript
+it is `invocationKey`. It is unique within your organization, and it is also how
+you read the run back later — `GET /traces/{invocation_key}`. The effective key
+always comes back in the `Idempotency-Key` response header, even when you let
+the server generate one.
+
+| Situation | Result |
+|---|---|
+| Same key, identical body | Re-attaches to that invocation and returns its current state |
+| Same key, different body | `409` |
+| New key while another invocation is still running in the session | `423` — a session runs one invocation at a time |
+| No key | A fresh, non-retry-safe invocation; the server generates a key |
+
+**Choosing a session id.** Ids match `^[0-9a-zA-Z._:-]+$`, 2–100 characters.
+Use something meaningful from your own system — the ticket (`support-1234`),
+the pull request (`pr-987`), the job (`nightly:2026-08-11`) — so you can find
+the session again without storing a mapping, and so the conversation naturally
+continues where the work does.
+
+**Choosing an invocation key.** Derive it from the thing that must happen
+exactly once: the event id that triggered the run, or the session id plus a
+turn counter (`support-1234-triage-1`). Never a timestamp or a random value
+generated on each retry — that is a new invocation every time, which is what
+the key exists to prevent. Reusing a key re-attaches even to a *failed* run, so
+use the same key to recover a lost response and a new key to genuinely run
+again.
+
+## 3. Add web search and a terminal
+
+Add the two built-in tools. The agent stops answering from memory alone: it can
+look things up on the web and run commands in a persistent Linux sandbox, and
+the model decides when to call each. Runs get longer and better grounded.
+
+<CodeGroup>
+
+```python Python focus={14}
+import os
+
+from albus_sdk import Albus
+
+with Albus(api_key=os.environ["ALBUS_API_KEY"]) as albus:
+    response = albus.sessions.run_session(
+        id="support-1234",
+        agent_name="support-triage",
+        invocation_key="support-1234-triage-2",
+        user_prompt="Check whether our status page reports an auth incident today.",
+        agent={
+            "model": {"name": "gemini-3.6-flash"},
+            "system_prompt": "You triage support tickets. Be terse.",
+            "tools": {"web_search": {}, "terminal": {}},  # [!code ++]
+        },
+        wait_timeout_seconds=300,
+    )
+    print(response.result.message.content)
+```
+
+```json agent.json focus={4}
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "system_prompt": "You triage support tickets. Be terse.",
+  "tools": { "web_search": {}, "terminal": {} } // [!code ++]
+}
+```
+
+</CodeGroup>
+
+`tools` is an object of tool blocks: include a block to offer that tool, omit
+it to withhold it. `web_search` shows up in traces as `WEB_SEARCH` and
+`terminal` as `TERMINAL`. In the CLI, `--tool web_search --tool terminal`
+builds the same object when you are not using `--agent-file`. What each tool
+does and what it costs is in [Built-in tools](/guides/built-in-tools).
+
+Tool calls take steps. `max_steps` caps how many model steps a run may take
+before it stops; add it when the agent has tools that could keep it busy.
+
+## 4. Limit the tools the agent can see
+
+Take a tool away. The model never learns the tool exists, so it cannot be
+talked into using it — the agent becomes a web researcher that cannot execute
+anything.
+
+<CodeGroup>
+
+```python Python focus={14-16}
+import os
+
+from albus_sdk import Albus
+
+with Albus(api_key=os.environ["ALBUS_API_KEY"]) as albus:
+    response = albus.sessions.run_session(
+        id="support-1234",
+        agent_name="support-triage",
+        invocation_key="support-1234-triage-3",
+        user_prompt="Check whether our status page reports an auth incident today.",
+        agent={
+            "model": {"name": "gemini-3.6-flash"},
+            "system_prompt": "You triage support tickets. Be terse.",
+            "tools": {"web_search": {}, "terminal": {}},  # [!code --]
+            "tools": {"web_search": {}},  # [!code ++]
+            "max_steps": 8,  # [!code ++]
+        },
+        wait_timeout_seconds=300,
+    )
+    print(response.result.message.content)
+```
+
+```json agent.json focus={4-6}
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "system_prompt": "You triage support tickets. Be terse.",
+  "tools": { "web_search": {}, "terminal": {} }, // [!code --]
+  "tools": { "web_search": {} }, // [!code ++]
+  "max_steps": 8 // [!code ++]
+}
+```
+
+</CodeGroup>
+
+The `tools` object is an allowlist: what is not in it does not exist for the
+model. Omit `tools` entirely and the agent has no built-in tools at all, as in
+step 1. The same idea applies to MCP servers in the next step, where
+`allowed_tools` picks which of a server's tools the model is offered — and a
+prompt that says "do not run commands" is not a substitute for either: the
+model can ignore instructions, but it cannot call a tool it was never given.
+
+## 5. Add a secret and an MCP server
+
+Give the agent your own tools through an MCP server, authenticated with a
+secret. The agent can now act on your systems — here, search GitHub issues —
+and the credential never appears in the configuration, the audit log, or a
+revision.
+
+First store the credential. The value is the full header value the server
+expects, `Bearer` included:
+
+<CodeGroup>
+
+```bash CLI
+printf 'Bearer %s' "$GITHUB_TOKEN" | albus secrets create integrations/github/token
+```
+
+```python Python
+secret = albus.secrets.create_secret(
+    name="integrations/github/token",
+    value=f"Bearer {os.environ['GITHUB_TOKEN']}",
+)
+print(secret.name, secret.masked_value)
+```
+
+</CodeGroup>
+
+Reads return the value masked to its last three characters; no operation
+returns a secret's value. Names are path-like (`/`-separated segments of
+`[a-zA-Z0-9_-]`), so group them the way you would files.
+
+Then reference it from the agent as `albus.sh/secrets/<name>`:
+
+<CodeGroup>
+
+```python Python focus={16-25}
+import os
+
+from albus_sdk import Albus
+
+with Albus(api_key=os.environ["ALBUS_API_KEY"]) as albus:
+    response = albus.sessions.run_session(
+        id="support-1234",
+        agent_name="support-triage",
+        invocation_key="support-1234-triage-4",
+        user_prompt="Is this login failure a known issue? Cite issue numbers.",
+        agent={
+            "model": {"name": "gemini-3.6-flash"},
+            "system_prompt": "You triage support tickets. Be terse.",
+            "tools": {"web_search": {}},
+            "max_steps": 8,
+            "mcp_servers": [  # [!code ++]
+                {  # [!code ++]
+                    "name": "github",  # [!code ++]
+                    "url": "https://api.githubcopilot.com/mcp/",  # [!code ++]
+                    "headers": {  # [!code ++]
+                        "Authorization": "albus.sh/secrets/integrations/github/token"  # [!code ++]
+                    },  # [!code ++]
+                    "allowed_tools": ["search_issues", "get_issue"],  # [!code ++]
+                }  # [!code ++]
+            ],  # [!code ++]
+        },
+        wait_timeout_seconds=300,
+    )
+    print(response.result.message.content)
+```
+
+```json agent.json focus={6-15}
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "system_prompt": "You triage support tickets. Be terse.",
+  "tools": { "web_search": {} },
+  "max_steps": 8,
+  "mcp_servers": [ // [!code ++]
+    { // [!code ++]
+      "name": "github", // [!code ++]
+      "url": "https://api.githubcopilot.com/mcp/", // [!code ++]
+      "headers": { // [!code ++]
+        "Authorization": "albus.sh/secrets/integrations/github/token" // [!code ++]
+      }, // [!code ++]
+      "allowed_tools": ["search_issues", "get_issue"] // [!code ++]
+    } // [!code ++]
+  ] // [!code ++]
+}
+```
+
+</CodeGroup>
+
+Albus connects to the server for the run, discovers its tools, offers them to
+the model, and dispatches the calls; nothing runs on your machine. The server
+must speak **Streamable HTTP** at a public `http(s)` URL — `stdio` servers need
+an HTTP front.
+
+| Field | Meaning |
+|---|---|
+| `name` | Your alias. It prefixes the tool names the model sees: `search_issues` becomes `github__search_issues`. Unique in the configuration, and must not contain `__`. |
+| `url` | The server's Streamable HTTP endpoint. |
+| `headers` | Sent to the server. A value in `albus.sh/secrets/<name>` form is resolved when the run starts; any other value is sent literally. |
+| `allowed_tools` | The server's tools the model may call, by the server's own names. **Omit to allow all of them.** |
+
+A reference is resolved when the run starts, not when the request is
+validated, so a reference to a secret that does not exist fails the invocation
+rather than the request — create the secret first. Rotating is
+`albus secrets update`: references keep working, the next run picks up the new
+value, and the configuration is unchanged.
+
+## 6. Configure memory
+
+Add a memory group. What the agent learns now outlives the session: every
+invocation configured with the same `group` reads the same memories, whichever
+session it runs in, and writes new ones at the points you list.
+
+<CodeGroup>
+
+```python Python focus={26-29}
+import os
+
+from albus_sdk import Albus
+
+with Albus(api_key=os.environ["ALBUS_API_KEY"]) as albus:
+    response = albus.sessions.run_session(
+        id="support-1234",
+        agent_name="support-triage",
+        invocation_key="support-1234-triage-5",
+        user_prompt="Is this login failure a known issue? Cite issue numbers.",
+        agent={
+            "model": {"name": "gemini-3.6-flash"},
+            "system_prompt": "You triage support tickets. Be terse.",
+            "tools": {"web_search": {}},
+            "max_steps": 8,
+            "mcp_servers": [
+                {
+                    "name": "github",
+                    "url": "https://api.githubcopilot.com/mcp/",
+                    "headers": {
+                        "Authorization": "albus.sh/secrets/integrations/github/token"
+                    },
+                    "allowed_tools": ["search_issues", "get_issue"],
+                }
+            ],
+            "memory": {  # [!code ++]
+                "group": "support",  # [!code ++]
+                "generation": ["agent", "end_of_invocation"],  # [!code ++]
+            },  # [!code ++]
+        },
+        wait_timeout_seconds=300,
+    )
+    print(response.result.message.content)
+```
+
+```json agent.json focus={16-19}
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "system_prompt": "You triage support tickets. Be terse.",
+  "tools": { "web_search": {} },
+  "max_steps": 8,
+  "mcp_servers": [
+    {
+      "name": "github",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "albus.sh/secrets/integrations/github/token"
+      },
+      "allowed_tools": ["search_issues", "get_issue"]
+    }
+  ],
+  "memory": { // [!code ++]
+    "group": "support", // [!code ++]
+    "generation": ["agent", "end_of_invocation"] // [!code ++]
+  } // [!code ++]
+}
+```
+
+</CodeGroup>
+
+`generation` is when memories get written: `end_of_invocation` after the
+invocation answers, `agent` whenever the agent decides mid-run that something
+is worth keeping. A group is yours to scope — one per customer, per team, per
+agent. Without `memory`, a session still remembers its own last 1000 messages;
+memory is what carries knowledge *between* sessions. Read and prune a group
+with `GET /memories?group=support` and `DELETE /memories?group=support`, or in
+the console under **Memories**. More in [Built-in
+tools](/guides/built-in-tools#memory).
+
+## 7. Read the trace and iterate
+
+Every invocation is recorded as a **trace**: the invocation, each step, the
+model call in each step, and the tool calls it requested, as spans with their
+inputs, outputs, timings, and token usage. It is how you find out what the
+agent actually did — and the fastest loop for improving a prompt or a tool.
+
+```bash
+curl --fail-with-body \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  "https://albus.sh/api/traces/support-1234-triage-5"
+```
+
+```python Python
+trace = albus.traces.get_trace(invocation_key="support-1234-triage-5")
+for span in trace.result.spans:
+    print(span.id, span.type, span.name or "", span.status)
+```
+
+```text
+inv5                     invocation             SUCCEEDED
+inv5.attempt1.step1      step                   SUCCEEDED
+inv5.attempt1.step1.model model_call  gemini-3.6-flash SUCCEEDED
+inv5.attempt1.step1.tool1 tool_call   github__search_issues SUCCEEDED
+inv5.attempt1.step2      step                   SUCCEEDED
+inv5.attempt1.step2.model model_call  gemini-3.6-flash SUCCEEDED
+```
+
+Span ids read as a path: `inv5` is the fifth invocation of the session,
+`inv5.attempt1.step1.tool1` the first tool call the first step requested. A
+`model_call` span's `input` is exactly what the model was given and its
+`output` what it said, including the tool calls it asked for; a `tool_call`
+span's `input` is the arguments and its `output` the tool's result. Long
+payloads are shortened with an `[omitted: …]` marker and carry their full byte
+count and SHA-256.
+
+Read a trace with questions like these:
+
+- **Did the agent call the tool you expected?** If `WEB_SEARCH` fires where
+  `github__search_issues` should have, the tool's description (from the MCP
+  server) or your `system_prompt` did not make the choice obvious. Name the
+  tool and when to use it in the prompt, or tighten `allowed_tools`.
+- **Did it get what it needed from the tool?** Look at the `tool_call` output.
+  A tool that returns 40 KB of JSON for a one-line answer wastes steps and
+  tokens; a tool that returns an error the model cannot act on gets retried.
+  Fix the tool's shape, not the prompt.
+- **Where did the steps go?** Count `step` spans and read `usage` on each
+  `model_call`. Loops of the same tool call with slightly different arguments
+  are a sign the task is underspecified; a `max_steps` stop is a sign the
+  budget or the prompt is wrong.
+- **Why did it fail?** A `FAILED` span carries `error`; the invocation carries
+  a `failure`. A retried invocation has more than one attempt — pass
+  `attempts=all` to see the superseded ones, whose tool calls still had their
+  effects.
+
+`GET /traces` lists invocations across sessions, newest first, filtered by
+`agent_name`, `agent_revision`, `status`, `session_id`, `since`, and `until` —
+`status=FAILED` on an agent name is the first thing to look at when a job goes
+wrong. Spans are kept for 90 days from the invocation's start. The console
+shows the same thing under **Traces**, with each invocation at
+`/traces/<invocation_key>`.
+
+Change the prompt or a tool, run again with a **new** invocation key, compare
+the traces. Which brings us to what "change" means.
+
+## 8. Every change is a revision
+
+You never create an agent: you name one on a run, and Albus records the
+configuration. Every distinct `agent` object under one `agent_name` becomes a
+**revision**, identified by a hash of the configuration — so each step in this
+guide created a new revision of `support-triage`, and running the same
+configuration again reuses the existing one.
+
+<CodeGroup>
+
+```bash CLI
+albus agents list
+albus agents get support-triage
+albus agents revision support-triage "$revision"
+```
+
+```python Python
+agent = albus.agents.get_agent(name="support-triage")
+for revision in agent.revisions:
+    print(revision.revision, revision.created_at)
+
+config = albus.agents.get_agent_revision(
+    name="support-triage", revision=agent.revisions[0].revision
+)
+```
+
+</CodeGroup>
+
+`agents get` returns the current revision's full configuration plus every
+revision, newest first; `agents revision` returns one revision's exact model,
+prompt, tools, MCP servers, and memory. In the console, **Agents** lists them,
+and each revision lives at `/agents/<name>/revisions/<revision>`.
+
+Every session response carries `session.agent_revision`, every trace and audit
+event carries `agent_revision`, and `GET /traces?agent_name=…&agent_revision=…`
+lists every invocation that ran one configuration. That is the link from an
+answer you are unhappy with back to the configuration that produced it:
+
+```bash
+revision=$(albus sessions get support-1234 | jq -r '.session.agent_revision')
+albus agents revision support-triage "$revision"
+```
+
+Keep `agent_name` stable for one job (`support-triage`, `pr-reviewer`) rather
+than per run or per customer, so the revision list reads as the agent's
+history; session ids are where per-run identity belongs. Record the revision
+next to your own results and you will always know what produced them. A
+revision is configuration only — credentials are references, so rotating a
+secret does not create one.
+
+## 9. The audit log
+
+The audit log is the security record of a session: an immutable, time-ordered
+account of every invocation, model call, and tool call — arguments and
+results included — and how each run ended. Where a trace is for understanding
+and iterating, the audit log is for answering *what did this agent do, on whose
+request, with which configuration*.
+
+```bash
+albus sessions audit support-1234 --limit 50
+albus sessions audit support-1234 --after "$cursor"
+```
+
+| `type` | What it records |
+|---|---|
+| `agent_invocation` | The request that started the invocation |
+| `agent_step` | One step, how it ended, and how long it took |
+| `model_call` | A model call and the tool calls it requested |
+| `tool_call` | An executed tool call — arguments, response, and MCP server URL |
+| `invocation_succeeded` | The invocation produced its reply |
+| `invocation_failed` | The invocation failed, with the failure kind and detail |
+| `harness_exit` | The execution environment exited |
+
+Every event carries `session_id`, the `invocation_key` it belongs to, the
+`agent_revision` that ran, `event_time`, and a `payload` shaped by its `type`.
+Model output, tool output, and tool arguments are stored up to 32 KiB each,
+alongside the complete value's byte count, SHA-256 digest, and a truncation
+flag (`contentBytes`, `contentSha256`, `contentTruncated`), so a stored value
+can be checked against the original. Secrets never appear: references are
+resolved at run time and the values are not written anywhere the API returns.
+
+```bash
+# Which tools did the agent call, against which servers, with what arguments?
+albus sessions audit support-1234 | jq '.events[]
+  | select(.type=="tool_call")
+  | {tool: .payload.name, args: .payload.args, server: .payload.mcpServerUrl}'
+
+# Which configuration was running?
+albus sessions audit support-1234 | jq -r '.events[0].agent_revision'
+
+# Why did an invocation fail?
+albus sessions audit support-1234 | jq '.events[] | select(.type=="invocation_failed" or .type=="run_failed")'
+```
+
+Page with `--after`/`--limit` (default 100), passing the response's
+`next_cursor` as the next `after`. The log is per-session; for the same events
+across sessions, filtered by agent, revision, status, or time, use
+[traces](#7-read-the-trace-and-iterate).
+
+## Clean up
+
+```bash
+albus sessions delete support-1234
+albus secrets delete integrations/github/token
+```
+
+## Where next
+
+- [Bring your own key](/guides/bring-your-own-key) — run on your own model
+  provider account.
+- [Built-in tools](/guides/built-in-tools) — web search, the terminal, and
+  memory in detail.
+- [Errors](/reference/errors) — every status a run can return, and the fix.

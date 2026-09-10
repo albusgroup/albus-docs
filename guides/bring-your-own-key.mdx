@@ -1,0 +1,120 @@
+---
+title: Bring your own key
+description: Point an agent at your own model provider account — your quota, your rate limits, your billing.
+---
+
+By default Albus runs the model on its own credentials, and the model has to be
+one from Albus's catalog. Bring your own key and the agent runs on **your**
+provider account instead: your quota, your rate limits, your billing, and any
+model that account can reach.
+
+## 1. Get a key from the provider
+
+Create an API key in the provider's console, scoped to the models you intend to
+run:
+
+| Provider | `model.provider.name` | Where to create a key |
+|---|---|---|
+| Google Gemini | `gemini` | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| OpenAI | `openai` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
+| Anthropic | `anthropic` | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) |
+| Together AI | `together` | [api.together.ai/settings/api-keys](https://api.together.ai/settings/api-keys) |
+
+Any other provider name fails the run.
+
+## 2. Store it as a secret
+
+An agent configuration is stored and versioned, so it must never contain a raw
+key. Store the key once as a secret; the value is never returned by the API and
+never appears in a session, trace, audit event, or agent revision.
+
+<CodeGroup>
+
+```bash CLI
+printf '%s' "$GEMINI_API_KEY" | albus secrets create providers/gemini/prod
+```
+
+```python Python
+albus.secrets.create_secret(
+    name="providers/gemini/prod",
+    value=os.environ["GEMINI_API_KEY"],
+)
+```
+
+</CodeGroup>
+
+Piping the value in keeps it out of your shell history. The name is path-like;
+one per provider and environment (`providers/openai/staging`) makes rotation
+obvious later.
+
+## 3. Point the agent at the provider
+
+Name the provider and reference the secret in `model.provider`:
+
+<CodeGroup>
+
+```json agent.json
+{
+  "model": {
+    "name": "gemini-3.6-flash",
+    "provider": { // [!code ++]
+      "name": "gemini", // [!code ++]
+      "credential": "albus.sh/secrets/providers/gemini/prod" // [!code ++]
+    } // [!code ++]
+  },
+  "system_prompt": "You triage support tickets. Be terse."
+}
+```
+
+```bash CLI
+albus sessions run support-1234 -p "Triage this ticket." \
+  --agent-name support-triage \
+  --model gemini-3.6-flash \
+  --provider gemini --credential albus.sh/secrets/providers/gemini/prod # [!code ++]
+```
+
+```python Python
+response = albus.sessions.run_session(
+    id="support-1234",
+    agent_name="support-triage",
+    user_prompt="Triage this ticket.",
+    agent={
+        "model": {
+            "name": "gemini-3.6-flash",
+            "provider": {  # [!code ++]
+                "name": "gemini",  # [!code ++]
+                "credential": "albus.sh/secrets/providers/gemini/prod",  # [!code ++]
+            },  # [!code ++]
+        },
+        "system_prompt": "You triage support tickets. Be terse.",
+    },
+    wait_timeout_seconds=120,
+)
+```
+
+</CodeGroup>
+
+| Field | Meaning |
+|---|---|
+| `name` | Provider: `gemini`, `openai`, `anthropic`, or `together`. |
+| `credential` | A secret reference, `albus.sh/secrets/<name>`. A raw key here is rejected. The reference is resolved when the run starts, so the secret must exist. |
+| `url` | Optional base URL override for the provider endpoint — a proxy, a gateway, or a compatible self-hosted endpoint. |
+
+In the CLI, `--provider` and `--credential` must be given together.
+
+## What changes
+
+- **Models.** `model.name` may be anything the provider serves under your
+  key — it no longer has to be in Albus's catalog (`albus models list`). A
+  model the provider does not serve, or the key does not authorize, surfaces as
+  a failed run (`502`) rather than a rejected request, because it is the
+  provider that refuses it; the `model_call` span in the
+  [trace](/guides/build-an-agent#7-read-the-trace-and-iterate) carries the
+  provider's error.
+- **Revisions.** The provider is part of the agent configuration, so adding it
+  creates a new [revision](/guides/build-an-agent#8-every-change-is-a-revision).
+  Rotating the key does not: `albus secrets update providers/gemini/prod`
+  changes nothing in the configuration, and the next run picks up the new
+  value.
+- **Everything else** — tools, MCP servers, memory, traces, the audit log —
+  works the same.

@@ -7,10 +7,6 @@
     "light": "#3B82F6",
     "dark": "#1D4ED8"
   },
-  "banner": {
-    "content": "Albus is in private beta: invite-only, 20 session runs per organization. [What that means](/beta/limitations)",
-    "dismissible": true
-  },
   "contextual": {
     "options": ["copy", "view", "chatgpt", "claude"]
   },
@@ -27,44 +23,20 @@
     "groups": [
       {
         "group": "Getting started",
-        "pages": [
-          "index",
-          "getting-started/access",
-          "getting-started/install",
-          "getting-started/authenticate",
-          "getting-started/first-session",
-          "getting-started/for-your-agent"
-        ]
+        "pages": ["index", "getting-started/authentication"]
       },
       {
         "group": "Guides",
         "pages": [
-          "guides/run-a-session",
-          "guides/secrets",
-          "guides/mcp-servers",
-          "guides/model-providers",
-          "guides/agents-and-revisions",
-          "guides/audit-log",
+          "guides/build-an-agent",
+          "guides/bring-your-own-key",
+          "guides/built-in-tools",
           "guides/troubleshooting"
         ]
       },
       {
-        "group": "For coding agents",
-        "pages": ["agents/docs"]
-      },
-      {
-        "group": "Private beta",
-        "pages": ["beta/limitations", "beta/support"]
-      },
-      {
         "group": "Reference",
-        "pages": [
-          "reference/cli",
-          "reference/sdks",
-          "reference/errors",
-          "reference/overview",
-          "guides/releases"
-        ]
+        "pages": ["reference/cli", "reference/sdks", "reference/errors"]
       },
       {
         "group": "API reference",
@@ -93,7 +65,27 @@
   "redirects": [
     {
       "source": "/getting-started/api",
-      "destination": "/getting-started/authenticate"
+      "destination": "/getting-started/authentication"
+    },
+    {
+      "source": "/getting-started/authenticate",
+      "destination": "/getting-started/authentication"
+    },
+    {
+      "source": "/getting-started/access",
+      "destination": "/getting-started/authentication"
+    },
+    {
+      "source": "/getting-started/install",
+      "destination": "/getting-started/authentication"
+    },
+    {
+      "source": "/getting-started/first-session",
+      "destination": "/"
+    },
+    {
+      "source": "/getting-started/for-your-agent",
+      "destination": "/agents/docs"
     },
     {
       "source": "/getting-started/python",
@@ -112,12 +104,52 @@
       "destination": "/agents/docs"
     },
     {
+      "source": "/guides/run-a-session",
+      "destination": "/guides/build-an-agent"
+    },
+    {
+      "source": "/guides/secrets",
+      "destination": "/guides/build-an-agent#5-add-a-secret-and-an-mcp-server"
+    },
+    {
+      "source": "/guides/mcp-servers",
+      "destination": "/guides/build-an-agent#5-add-a-secret-and-an-mcp-server"
+    },
+    {
+      "source": "/guides/agents-and-revisions",
+      "destination": "/guides/build-an-agent#8-every-change-is-a-revision"
+    },
+    {
+      "source": "/guides/audit-log",
+      "destination": "/guides/build-an-agent#9-the-audit-log"
+    },
+    {
+      "source": "/guides/model-providers",
+      "destination": "/guides/bring-your-own-key"
+    },
+    {
+      "source": "/guides/releases",
+      "destination": "/reference/sdks"
+    },
+    {
+      "source": "/reference/overview",
+      "destination": "/api-reference/sessions/run-or-resume-a-session"
+    },
+    {
       "source": "/alpha/limitations",
-      "destination": "/beta/limitations"
+      "destination": "/"
     },
     {
       "source": "/alpha/support",
-      "destination": "/beta/support"
+      "destination": "/"
+    },
+    {
+      "source": "/beta/limitations",
+      "destination": "/"
+    },
+    {
+      "source": "/beta/support",
+      "destination": "/"
     }
   ]
 }

@@ -1,6 +1,6 @@
 ---
-title: Authenticate
-description: Sign in with a browser, or authenticate with an organization API key.
+title: Authentication
+description: Install the CLI, sign in with a browser, or authenticate with an organization API key.
 ---
 
 Authenticate a client against Albus. Albus accepts two credentials, and both are
@@ -15,6 +15,36 @@ Sessions, secrets, agents, traces, memories, and models accept either, and so
 does `/whoami`, which names whichever of the two signed the request. Operations
 that act as *you* rather than as your organization — everything under `/tokens`,
 and `/invites` — accept the user session only.
+
+## Install the CLI
+
+The CLI is the only way to sign in with a browser, and the fastest way to run a
+session. It is a Python package and needs Python 3.11 or newer.
+
+<CodeGroup>
+
+```bash macOS / Linux
+curl -fsSL https://albus.sh/install.sh | sh
+```
+
+```powershell Windows
+irm https://albus.sh/install.ps1 | iex
+```
+
+```bash uv
+uv tool install albus-cli
+```
+
+```bash pip
+pip install --user albus-cli
+```
+
+</CodeGroup>
+
+If `albus` is not found afterwards, the install directory — usually
+`~/.local/bin` — is not on your `PATH`; open a new shell, or add it. The SDKs
+install with `pip install albus-sdk` and `npm install @albus-ts/sdk`; see
+[SDKs](/reference/sdks).
 
 ## Sign in with a browser
 

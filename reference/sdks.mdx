@@ -5,7 +5,7 @@ description: The Python and TypeScript clients — installation, authentication,
 
 Install and authenticate the Python or TypeScript client. Both SDKs are generated
 from the same [OpenAPI contract](https://docs.albus.sh/openapi/openapi.yaml) that
-produces the [API reference](/reference/overview), so every operation, field, and
+produces the [API reference](/api-reference/sessions/run-or-resume-a-session), so every operation, field, and
 error there exists in both, with the same semantics.
 
 | | Python | TypeScript |
@@ -61,7 +61,7 @@ The two clients spell it differently: Python takes the credential directly
 TypeScript takes a `security` object (`apiKey` or `bearerAuth`). Constructed
 with no credential, both read `ALBUS_API_KEY` and `ALBUS_BEARER_AUTH` from
 the environment — the same `ALBUS_API_KEY` the CLI reads, see
-[Authenticate](/getting-started/authenticate).
+[Authentication](/getting-started/authentication).
 
 `whoami()` names whichever credential signed the request: `user` for a bearer
 token, `api_key` / `apiKey` for a key. The other is absent.
@@ -124,13 +124,13 @@ await albus.memories.deleteMemoryGroup({ group: "support" });
 latest attempt's spans unless you pass `attempts="all"`, and takes
 `payloads=False` for the shape of an invocation without its prompts and tool
 output — which raises the span limit to 500, so a whole trace usually fits in
-one request. See [the API reference](/reference/overview).
+one request. See [the API reference](/api-reference/sessions/run-or-resume-a-session).
 
 ## Errors
 
 Every non-2xx status raises a typed error carrying `status_code`, `message`, and
 `body` (`errors.AlbusError` and its subclasses in Python). Handle at least `423`,
-`429`, and `504` — see [failure modes](/guides/run-a-session#failure-modes).
+`429`, and `504` — see [Errors](/reference/errors).
 
 Retries are configured on the client (`retry_config=`), and `run_session` takes a
 `retry_config=` of its own to override it for that call. When configured, the
@@ -176,10 +176,7 @@ transport gives up while the run is still going.
 
 ## Versions
 
-The published SDK version that matches the current API reference is recorded in
-the [release policy](/guides/releases). SDKs are released after the API they
-document is deployed, never before.
-
+SDKs are released after the API they document is deployed, never before.
 Current floors for the examples on this page:
 
 | Package | Version | Why |

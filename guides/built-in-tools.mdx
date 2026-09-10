@@ -1,0 +1,125 @@
+---
+title: Built-in tools
+description: What web search, the terminal, and memory do, how to enable each, and where it shows up in a trace.
+---
+
+Albus provides three capabilities an agent can use without an MCP server of your
+own: **web search**, a **terminal** sandbox, and **memory**. The first two are
+enabled in the agent's `tools` object; memory is its own `memory` block. All
+three are part of the agent configuration, so enabling one creates a new
+[revision](/guides/build-an-agent#8-every-change-is-a-revision).
+
+```json agent.json
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "tools": { "web_search": {}, "terminal": {} },
+  "memory": { "group": "support", "generation": ["agent", "end_of_invocation"] }
+}
+```
+
+`tools` is an allowlist: a tool's block offers it, its absence withholds it, and
+an unknown name is rejected with `400`. The blocks carry no options yet —
+`{}` is the whole configuration. In the CLI, `--tool web_search --tool
+terminal` builds the same object; `memory` needs an `--agent-file`.
+
+## Web search
+
+```json
+"tools": { "web_search": {} }
+```
+
+Gives the model a `web_search` tool: a query in, a ranked list of results out,
+each with a title, URL, and a relevant snippet of the page — not the page
+itself. The model chooses how many results to ask for (5 by default, at most
+20 per call). The search runs on Albus's own account; there is nothing to
+configure and no key to bring.
+
+Use it when answers depend on current facts — documentation, status pages,
+prices, news — or when the agent should cite sources. Steer it from the
+`system_prompt` ("search before answering questions about third-party APIs",
+"cite the URL you relied on"), and read the `tool_call` spans named
+`WEB_SEARCH` in the [trace](/guides/build-an-agent#7-read-the-trace-and-iterate)
+to see the queries the model actually issued and what came back.
+
+## Terminal
+
+```json
+"tools": { "terminal": {} }
+```
+
+Gives the model a `terminal` tool: one bash command in, the command's combined
+stdout and stderr and its exit code out. Commands run on a persistent Linux
+machine dedicated to the **session**, with Python 3 and common scripting and
+data libraries (pandas, numpy, requests, matplotlib, scipy) preinstalled.
+
+What "persistent" means:
+
+- The filesystem survives across commands and across the session's runs, so a
+  file written in one invocation is there in the next. It does not cross
+  sessions.
+- The machine sleeps after a few minutes of inactivity and resumes
+  transparently on the next command.
+- Output beyond 64 KB is truncated, and the result says so
+  (`output_truncated: true`); the tool's description tells the model to write
+  large output to a file and read it selectively.
+- In the rare case the machine is lost and must be replaced, the result carries
+  `sandbox_recreated: true` and the model is instructed to tell the user that
+  previous files are gone.
+
+The terminal is the tool that lets an agent *execute*: transform data, run a
+script, call an API with `curl`, verify a computation. It is also the tool to
+withhold from an agent that should only read and reason — see [limit the tools
+the agent can see](/guides/build-an-agent#4-limit-the-tools-the-agent-can-see).
+Every command, its output, and its exit code is recorded as a `tool_call` span
+named `TERMINAL` in the trace and a `tool_call` event in the
+[audit log](/guides/build-an-agent#9-the-audit-log).
+
+## Memory
+
+```json
+"memory": { "group": "support", "generation": ["agent", "end_of_invocation"] }
+```
+
+Gives the agent durable memory that outlives the session. A **group** is the
+sharing unit: every invocation configured with the same `group` reads the same
+memories and contributes to them, whichever session it runs in. The key is
+yours to choose (1–256 characters; letters, digits, punctuation, and spaces) and
+means whatever you want it to — an end user, a team, a project, one agent.
+
+`generation` lists the points at which the agent may write memories, and at
+least one is required:
+
+| Value | When memories are written |
+|---|---|
+| `end_of_invocation` | After the invocation answers, Albus reads the finished transcript and extracts the durable facts it established — often none. |
+| `agent` | During the run, whenever the model decides something is worth keeping, through a `memory_save` tool it is given. |
+
+With any `memory` block the model also gets a `memory_search` tool, which
+recalls memories ranked by relevance to a query, so it can look things up from
+earlier sessions on its own. A memory is a short fact stated as the agent stated
+it; a later memory that supersedes one marks the earlier one `invalidated`, and
+agents stop reading it.
+
+Memory is different from session history. A session already carries its own
+last 1000 messages into each run; memory is what carries knowledge *between*
+sessions — a customer's environment, a preference, a decision made last week.
+
+Read and prune a group over the API or in the console under **Memories**:
+
+```bash
+# Newest first, both active and invalidated; page with after/limit
+curl --fail-with-body \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  "https://albus.sh/api/memories?group=support"
+
+# Forget one memory, or the whole group
+curl --fail-with-body --request DELETE \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  "https://albus.sh/api/memories/$MEMORY_ID?group=support"
+curl --fail-with-body --request DELETE \
+  --header "Authorization: Bearer $ALBUS_API_KEY" \
+  "https://albus.sh/api/memories?group=support"
+```
+
+Deleting is permanent; agents bound to the group remember nothing from before
+the call and can remember again after it.
