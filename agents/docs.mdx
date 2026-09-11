@@ -50,7 +50,8 @@ albus status
 
 `status` prints JSON: `credential` is `api_key`, `session`, or `none`;
 `authenticated` says whether Albus accepted it. It exits 0 either way; read the
-JSON. If `authenticated` is true, skip to the SDK install.
+JSON. If `authenticated` is true with `credential: "api_key"`, skip to the SDK
+install; a browser session still needs an API key minted below.
 
 You cannot complete a browser sign-in yourself. Print the URL, let the user
 open it:
@@ -217,7 +218,7 @@ none. The key is unique in your organization and is how you read the run back:
 | A new key | Starts a run |
 | The same key, same body | Re-attaches to that run and returns its current state, even after it finished or failed |
 | The same key, different body | `409` |
-| Any key while the session is already running | `423` |
+| A different key while the session is already running | `423` |
 | No key | Starts a run you cannot retry safely |
 
 Rules:
