@@ -1,294 +1,86 @@
 ---
 title: Albus for coding agents
-description: "One page: what Albus is, how to set it up, the whole API surface, the rules, and runnable examples."
+description: "Self-contained: authentication, the complete API for running, resuming, canceling, and reading sessions, traces, audit events, pagination, retries, and idempotency, in Python and TypeScript."
 ---
 
-{/* This page is the canonical target for "read this and use Albus": it is what
-    the CLI prints, and it is meant to be read whole by a machine. Keep it
-    imperative, complete, and self-sufficient — an agent that reads only this
-    file must be able to set Albus up and write correct code against it. */}
+{/* This page is what the CLI prints for "read this and use Albus". It is read
+    whole by a machine. Keep it complete and self-sufficient: an agent that
+    reads only this file must be able to authenticate and write correct code
+    against every endpoint below. Keep it in sync with the CLI and SDKs. */}
 
-Albus runs agent sessions over an HTTP API. A **session** is a named
-conversation with an agent: you choose the identifier, and running the same
-identifier again continues that conversation. One HTTP call runs a turn and
-returns the assistant's reply.
+Albus runs agents behind one HTTP API. A **session** is a named conversation:
+you pick the id, and running the same id again continues it. One `POST` runs a
+turn and returns the reply. Everything the agent did is recorded as a trace and
+in the session's audit log.
 
-You are probably reading this to set Albus up for the user of this machine, or to
-write code against it. Both are below, in order. Do not skip verification.
+Read as much of https://docs.albus.sh as you need. Every page is Markdown with
+`.md` appended to its URL; https://docs.albus.sh/llms.txt is the map. This page
+is enough to write working code.
 
 ## Limits
 
-Read these before designing anything.
+- **One run per session at a time.** A second one gets `423`. Run concurrently
+  across session ids, not inside one.
+- **Runs cost credits.** `402` means the organization's balance is empty. Stop
+  and tell the user; retrying does not help.
+- **Bounded retries.** Albus retries a crashed run up to three attempts, then
+  fails it with `502`.
+- **Observability is traces plus the per-session audit log.** Spans are kept 90
+  days.
 
-- **Runs are limited per organization.** `429` means the limit is reached.
-  Never retry a run in a loop.
-- **One invocation per session at a time.** A second one gets `423`. Concurrency
-  lives across session ids.
-- **Bounded retries.** Albus retries a crashed invocation up to three attempts;
-  past that it fails with `502` and does not resume.
-- **No usage or billing surface.** Consumption is metered but not readable, apart
-  from per-invocation token usage on traces.
-- **Observability is traces plus the per-session audit log** — no metrics,
-  dashboards, or alerting. Trace spans are kept for 90 days.
+## Authentication
 
-## Setup
+Base URL `https://albus.sh/api`. Every request carries
+`Authorization: Bearer <credential>`. There are two credentials:
 
-### 1. Install the CLI
+| Credential | Looks like | Get it | Use it for |
+|---|---|---|---|
+| Organization API key | `alb-…` | `albus tokens create NAME` (browser session required) or the console | Scripts, CI, SDKs. Set `ALBUS_API_KEY`; the CLI and both SDKs read it. |
+| Browser session | — | `albus login` | Interactive CLI use, and minting API keys |
 
-```bash
-curl -fsSL https://albus.sh/install.sh | sh
-```
+`/tokens` and `/invites` identify *you* and need the browser session.
+Everything else accepts either.
 
-On Windows: `irm https://albus.sh/install.ps1 | iex`.
-
-The installer uses `uv tool install`, then `pip install --user`, then conda. If
-`albus` is not on `PATH` afterwards, it is in the scripts directory the installer
-printed (usually `~/.local/bin`).
-
-### 2. Check what state you are in
+### Set up the CLI
 
 ```bash
+curl -fsSL https://albus.sh/install.sh | sh     # Windows: irm https://albus.sh/install.ps1 | iex
 albus status
 ```
 
-```json
-{
-  "cli_version": "0.5.0",
-  "base_url": "https://albus.sh/api",
-  "credential": "none",
-  "authenticated": false
-}
-```
+`status` prints JSON: `credential` is `api_key`, `session`, or `none`;
+`authenticated` says whether Albus accepted it. It exits 0 either way; read the
+JSON. If `authenticated` is true, skip to the SDK install.
 
-`credential` is `api_key` when `ALBUS_API_KEY` is set, `session` when the user is
-signed in, `none` otherwise. A credential Albus accepted also reports `caller`,
-the `/whoami` body naming whoever it authenticates; one that does not work
-reports `error`. The command
-exits 0 either way — read the JSON, not the exit code. If `authenticated` is
-already `true`, skip to step 4.
-
-### 3. Authenticate
-
-You cannot complete a browser sign-in yourself. Print the URL and let the user
-open it.
+You cannot complete a browser sign-in yourself. Print the URL, let the user
+open it:
 
 ```bash
 albus login --no-browser
 ```
 
-The command prints the authorization URL on its own line, then blocks until the
-user finishes, for up to 180 seconds. Show the URL verbatim and ask them to open
-it. Do not open a browser on their behalf, and do not paste their credentials
-anywhere.
+The command prints the URL on its own line and blocks up to 180 seconds. The
+redirect goes to `127.0.0.1:8484-8487` on the machine running the CLI; if the
+user's browser is elsewhere, they forward those ports (`ssh -L 8484:localhost:8484
+-L 8485:localhost:8485 -L 8486:localhost:8486 -L 8487:localhost:8487 user@host`)
+or set `ALBUS_API_KEY` here instead.
 
-The sign-in redirects to `127.0.0.1:8484-8487` on the machine running the CLI. If
-that is not the machine the user's browser is on, tell them to forward those four
-ports from their own machine:
-
-```bash
-ssh -L 8484:localhost:8484 -L 8485:localhost:8485 \
-    -L 8486:localhost:8486 -L 8487:localhost:8487 user@this-host
-```
-
-Or have them sign in on their own machine and set `ALBUS_API_KEY` here instead.
-An organization API key needs no browser:
+Verify with `albus whoami`, then mint a key for code:
 
 ```bash
-export ALBUS_API_KEY="alb-9pv2rk3n-1f4c8a6b2d9e7c50a3b81df6"
+albus tokens create local-dev        # the token field is shown once
+export ALBUS_API_KEY="alb-…"
 ```
 
-### 4. Verify
+Never write the key into source, committed config, or a shell profile you did
+not create for it.
 
-```bash
-albus whoami
-```
-
-JSON naming the caller means setup is complete: `whoami` accepts either
-credential and reports which one signed the request.
-
-### 5. Run one session
-
-Do this once, to prove the setup end to end. It spends a run, so run it once
-and do not loop.
-
-```bash
-albus sessions run setup-check \
-  --prompt "Reply with exactly: albus is working" \
-  --agent-name setup-check \
-  --model gemini-3.6-flash
-```
-
-The assistant's reply is `message.content`. The printed `invocation_key` names
-that run — it is what reads its trace back later.
-
-### 6. Install an SDK, if the user is writing code
+### Install an SDK
 
 ```bash
 pip install albus-sdk          # Python
 npm install @albus-ts/sdk      # TypeScript
 ```
-
-Both authenticate with an organization API key, which is a different credential
-from the browser session. Minting one requires the browser session from step 3:
-
-```bash
-albus tokens create local-dev
-```
-
-The `token` field is shown once. Have the user store it, then:
-
-```bash
-# One variable for every client: the CLI and both SDKs read ALBUS_API_KEY.
-export ALBUS_API_KEY="alb-9pv2rk3n-1f4c8a6b2d9e7c50a3b81df6"
-```
-
-Never write the key into a source file, a committed config, or a shell profile
-you did not create for this purpose.
-
-## The whole API surface
-
-Base URL `https://albus.sh/api`. Authenticate with `Authorization: Bearer <key>`.
-
-| Operation | HTTP | CLI |
-|---|---|---|
-| Run or resume a session | `POST /sessions/{id}` | `albus sessions run ID -p TEXT --agent-name NAME --model NAME` |
-| List sessions | `GET /sessions` | `albus sessions list` |
-| Get a session and its messages | `GET /sessions/{id}` | `albus sessions get ID` |
-| Audit what happened in it | `GET /sessions/{id}/audit` | `albus sessions audit ID` |
-| Delete a session | `DELETE /sessions/{id}` | `albus sessions delete ID` |
-| Store a credential | `POST /secrets` | `albus secrets create NAME --value V` |
-| List, read, update, delete secrets | `/secrets`, `/secrets/{name}` | `albus secrets list\|get\|update\|delete` |
-| List agents, get one | `GET /agents`, `GET /agents/{name}` | `albus agents list\|get` |
-| Get the exact configuration a run used | `GET /agents/{name}/revisions/{revision}` | `albus agents revision NAME REVISION` |
-| List invocations across sessions | `GET /traces` | — |
-| Read one invocation and its spans | `GET /traces/{invocation_key}` | — |
-| List a memory group | `GET /memories?group=NAME` | — |
-| Delete a memory, or a whole group | `DELETE /memories/{id}?group=NAME`, `DELETE /memories?group=NAME` | — |
-| List the models Albus serves | `GET /models` | `albus models list` |
-| Mint or manage API keys | `/tokens` | `albus tokens create\|list\|get\|delete` |
-| Invite someone | `POST /invites` | `albus invites create EMAIL` |
-| Who am I | `GET /whoami` | `albus whoami` |
-| Service health | `GET /health` | `albus health` |
-
-Everything above accepts an organization API key or a user bearer token, except
-`/tokens` and `/invites`, which identify *you* and take the browser session only.
-Traces and memories have no CLI commands yet.
-
-### Running a session
-
-```http
-POST /sessions/support-1234?wait_timeout_seconds=120
-Authorization: Bearer <key>
-Content-Type: application/json
-Idempotency-Key: support-1234-summary-v1
-
-{
-  "user_prompt": "Summarize this ticket for the on-call engineer.",
-  "agent_name": "support-triage",
-  "agent": {
-    "model": { "name": "gemini-3.6-flash" },
-    "system_prompt": "You triage support tickets. Be terse.",
-    "tools": { "web_search": {}, "terminal": {} },
-    "memory": { "group": "support", "generation": ["end_of_invocation"] },
-    "max_steps": 12,
-    "mcp_servers": [
-      {
-        "name": "github",
-        "url": "https://api.githubcopilot.com/mcp/",
-        "headers": { "Authorization": "albus.sh/secrets/integrations/github/token" },
-        "allowed_tools": ["search_issues", "get_issue"]
-      }
-    ]
-  }
-}
-```
-
-- `wait_timeout_seconds=<n>` blocks up to `n` seconds until the assistant replies
-  and returns the session with the one `message` this invocation produced — the
-  whole conversation is `GET /sessions/{id}`, whose `messages` holds every turn.
-  `1800` is the maximum, and what an
-  omitted parameter means. `wait_timeout_seconds=0` does not wait: it returns as
-  soon as the run is accepted, and you poll `GET /sessions/{id}` until
-  `session.state` leaves `RUNNING`.
-- Exceeding the wait is `504`, and the run is still going.
-- The CLI spells the same thing as `--wait`/`--no-wait` and `--wait-timeout`:
-  `--wait` (the default) with no `--wait-timeout` omits the parameter, and
-  `--no-wait` sends `0`. Both SDKs default the wait to `1800` and give the run a
-  31-minute transport timeout, so a waiting run needs no client configuration.
-- Omitting `agent.model.provider` uses the model credential Albus supplies, which
-  is what a first run should do. To bring your own, store it as a secret and
-  reference it — see [Bring your own key](/guides/bring-your-own-key).
-- `mcp_servers` requires a Streamable HTTP MCP endpoint. `allowed_tools` names
-  tools as the server names them; the agent sees them prefixed, as
-  `github__search_issues`. Omit it to allow every tool the server exposes. See
-  [Build an agent](/guides/build-an-agent#5-add-a-secret-and-an-mcp-server).
-- `tools` is an object, not a list: include a tool's block to offer it, omit it
-  to withhold it. `web_search` searches the web, `terminal` gives the model a
-  persistent Linux sandbox to run commands in.
-- `memory` gives the agent durable memory shared by every invocation configured
-  with the same `group`, whichever session it runs in. `generation` lists when it
-  may write: `end_of_invocation`, `agent`, or both.
-- `output_format` takes a JSON Schema the answer must conform to, and the reply
-  comes back as a JSON document. Every object in the schema must set
-  `"additionalProperties": false` and list every property in `"required"`, and
-  the model has to be one that supports structured output.
-- The model must be one `GET /models` lists, unless `agent.model.provider` names
-  your own account; an unserved model is `400`.
-
-### Reading an invocation back
-
-```http
-GET /traces?agent_name=support-triage&status=FAILED&limit=20
-GET /traces/support-1234-summary-v1?attempts=all
-```
-
-The detail response is the invocation — status, timings, failure — plus its
-**spans**: every step, model call, and tool call, with the payloads they carried.
-Defaults and knobs: only the latest attempt's spans unless `attempts=all`,
-`payloads=false` to drop payloads and page more spans at once, `after` to page.
-`attempts` lists every attempt with its own outcome and usage. Spans live 90
-days; past that `spans_expired` is true and the invocation itself still reads.
-
-List filters: `agent_name`, `agent_revision`, `status`, `session_id`, `since`,
-`until`, `after`, `limit`. A `503` may carry `Retry-After`.
-
-### Failures and what to do about them
-
-| Status | Meaning | Do |
-|---|---|---|
-| `400` | The agent configuration or prompt is invalid | Fix the request; do not retry as-is |
-| `401` | Credential rejected | `albus status`, then re-authenticate |
-| `404` | No such session, secret, agent, revision, or token | Check the identifier |
-| `409` | The invocation key was reused with a different body | Use a new key, or resend the original body |
-| `423` | Another invocation is running in that session | Wait, re-send the running key to attach, or use a different session id |
-| `429` | The organization's run limit is reached | Stop; the user emails carlo@albus.sh to raise it |
-| `502` | Every attempt of the invocation failed | Read `GET /traces/{invocation_key}` or `albus sessions audit ID`; a new invocation key reruns it |
-| `504` | The wait elapsed, the run continues | Re-send with the **same** invocation key, or poll |
-
-## Rules that matter when you write Albus code
-
-- **The session id is the caller's.** The same id resumes the conversation; a new
-  id starts one. Do not generate a fresh id per turn.
-- **Pass an invocation key** on anything unattended, derived from the work item
-  rather than the clock. The same key re-attaches to that invocation instead of
-  running again — which makes it right for a lost response or a `504`, and wrong
-  for rerunning a failed invocation. That needs a new key.
-- **One invocation per session at a time.** Concurrency lives across session ids,
-  not inside one.
-- **Credentials are never inlined.** Store them with `albus secrets create` and
-  reference them as `albus.sh/secrets/<name>`. Required for
-  `model.provider.credential`, correct for MCP headers. Values are resolved
-  server-side and never appear in responses or the audit log.
-- **`--agent-file` replaces the other agent flags** and cannot be combined with
-  them.
-- **The invocation key has two names.** It is `invocation_key=` in Python,
-  `invocationKey:` in TypeScript, `--invocation-key` in the CLI, and the
-  `Idempotency-Key` header over HTTP — one value, and what `GET /traces/{...}`
-  looks an invocation up by.
-
-## Examples
-
-### Run and resume a session
 
 <CodeGroup>
 
@@ -297,21 +89,7 @@ import os
 
 from albus_sdk import Albus
 
-SESSION = "example-resume"
-AGENT = {"model": {"name": "gemini-3.6-flash"}}
-
-with Albus(
-    api_key=os.environ["ALBUS_API_KEY"],
-) as albus:
-    for prompt in ["Name three primary colors.", "Now sort them alphabetically."]:
-        response = albus.sessions.run_session(
-            id=SESSION,
-            user_prompt=prompt,
-            agent_name="example",
-            agent=AGENT,
-            wait_timeout_seconds=300,
-        )
-        print(response.result.message.content)
+albus = Albus(api_key=os.environ["ALBUS_API_KEY"])
 ```
 
 ```typescript TypeScript
@@ -320,139 +98,445 @@ import { Albus } from "@albus-ts/sdk";
 const albus = new Albus({
   security: { apiKey: process.env.ALBUS_API_KEY ?? "" },
 });
-
-const session = "example-resume";
-const agent = { model: { name: "gemini-3.6-flash" } };
-
-for (const userPrompt of [
-  "Name three primary colors.",
-  "Now sort them alphabetically.",
-]) {
-  const response = await albus.sessions.runSession({
-    id: session,
-    waitTimeoutSeconds: 300,
-    body: { userPrompt, agentName: "example", agent },
-  });
-
-  console.log(response.result.message?.content);
-}
-```
-
-```bash CLI
-albus sessions run example-resume -p "Name three primary colors." \
-  --agent-name example --model gemini-3.6-flash
-albus sessions run example-resume -p "Now sort them alphabetically." \
-  --agent-name example --model gemini-3.6-flash
 ```
 
 </CodeGroup>
 
-### Run unattended, retry safely
+The Python client is also a context manager (`with Albus(...) as albus:`) and
+has an `AsyncAlbus` twin with the same methods. Every example below assumes
+`albus` from this block.
 
-The key is derived from the work item, not the clock, so a retry re-attaches
-instead of running twice. The wait is bounded, and a timeout means "still
-running".
+## The API
+
+| Do | HTTP | Python | TypeScript |
+|---|---|---|---|
+| Run or resume a session | `POST /sessions/{id}` | `sessions.run_session` | `sessions.runSession` |
+| Read a session and its messages | `GET /sessions/{id}` | `sessions.get_session` | `sessions.getSession` |
+| List sessions | `GET /sessions` | `sessions.list_sessions` | `sessions.listSessions` |
+| Cancel the running turn | `POST /sessions/{id}/cancel` | `sessions.cancel_session` | `sessions.cancelSession` |
+| Delete a session | `DELETE /sessions/{id}` | `sessions.delete_session` | `sessions.deleteSession` |
+| Read the audit log | `GET /sessions/{id}/audit` | `sessions.get_session_audit` | `sessions.getSessionAudit` |
+| List runs across sessions | `GET /traces` | `traces.list_traces` | `traces.listTraces` |
+| Read one run and its spans | `GET /traces/{invocation_key}` | `traces.get_trace` | `traces.getTrace` |
+| Agents and their revisions | `GET /agents`, `/agents/{name}`, `/agents/{name}/revisions/{revision}` | `agents.*` | `agents.*` |
+| Secrets | `/secrets`, `/secrets/{name}` | `secrets.*` | `secrets.*` |
+| Memory groups | `/memorygroups`, `/memorygroups/{group}`, `/memorygroups/{group}/memories/{id}` | `memories.*` | `memories.*` |
+| Models Albus serves | `GET /models` | `models.list_models` | `models.listModels` |
+| Who am I | `GET /whoami` | `auth.whoami` | `auth.whoami` |
+
+The CLI mirrors it: `albus sessions run|get|list|cancel|delete|audit`, `albus
+traces list|get`, `albus agents list|get|revision`, `albus secrets
+create|get|list|update|delete`.
+
+### Run or resume a session
+
+`POST /sessions/{id}` with `user_prompt`, `agent_name`, and `agent`. If the
+session does not exist it is created; if it does, the prompt is appended to the
+conversation and the model sees every earlier turn.
+
+<CodeGroup>
 
 ```python Python
-import os
-
-from albus_sdk import Albus, errors
-
-TICKET = "support-1234"
-
-with Albus(
-    api_key=os.environ["ALBUS_API_KEY"],
-) as albus:
-    for attempt in range(3):
-        try:
-            response = albus.sessions.run_session(
-                id=TICKET,
-                user_prompt="Summarize this ticket for the on-call engineer.",
-                agent_name="support-triage",
-                agent={"model": {"name": "gemini-3.6-flash"}},
-                invocation_key=f"{TICKET}-summary-v1",
-                wait_timeout_seconds=120,
-            )
-            print(response.result.message.content)
-            break
-        except errors.AlbusError as error:
-            # 504: the run is still going — the same key re-attaches to it.
-            # 429: the organization's run limit is reached; retrying will not help.
-            if error.status_code != 504:
-                raise
-    else:
-        print("still running after three waits")
+response = albus.sessions.run_session(
+    id="support-1234",
+    invocation_key="support-1234-triage-1",
+    user_prompt="Customer says login fails after the password reset. Triage it.",
+    agent_name="support-triage",
+    agent={
+        "model": {"name": "gemini-3.6-flash"},
+        "system_prompt": "You triage support tickets. Be terse.",
+        "tools": {"web_search": {}, "terminal": {}},
+    },
+    wait_timeout_seconds=300,
+)
+print(response.result.session.state)          # DONE
+print(response.result.message.content)        # the reply to this prompt
 ```
 
-### Give the agent GitHub tools
+```typescript TypeScript
+const response = await albus.sessions.runSession({
+  id: "support-1234",
+  invocationKey: "support-1234-triage-1",
+  waitTimeoutSeconds: 300,
+  body: {
+    userPrompt: "Customer says login fails after the password reset. Triage it.",
+    agentName: "support-triage",
+    agent: {
+      model: { name: "gemini-3.6-flash" },
+      systemPrompt: "You triage support tickets. Be terse.",
+      tools: { webSearch: {}, terminal: {} },
+    },
+  },
+});
+console.log(response.result.session.state);   // DONE
+console.log(response.result.message?.content);
+```
+
+</CodeGroup>
+
+The response is the `session` plus the one `message` this run produced. The
+whole conversation is `GET /sessions/{id}`.
+
+**`wait_timeout_seconds`** (query; `waitTimeoutSeconds` in TypeScript). Block
+up to this many seconds for the reply. Omit to wait 30 minutes, the maximum.
+`0` returns as soon as the run is accepted, with `session.state == "RUNNING"`
+and no `message`; poll `GET /sessions/{id}` until `state` changes. A timeout is
+`504` and the run keeps going. Both SDKs default to 1800 and set a 31-minute
+transport timeout, so a waiting call needs no client configuration.
+
+**`agent`** is the configuration. Every distinct one under an `agent_name` is
+recorded as a **revision** (`session.agent_revision`), so you never create an
+agent, you name one. Fields:
+
+| Field | Meaning |
+|---|---|
+| `model.name` | One of `GET /models`, or any model with `model.provider` set to your own account. |
+| `model.provider` | Your own provider credential, as a secret reference. Omit to use the model Albus supplies. |
+| `system_prompt` | Instructions. Albus prepends the current date and time. |
+| `tools` | Object, not list. `{"web_search": {}}` offers web search; `{"terminal": {}}` a persistent Linux sandbox. Omit a tool and the model never sees it. |
+| `mcp_servers` | `[{name, url, headers, allowed_tools}]`. Streamable HTTP only. The model sees tools as `<name>__<tool>`. |
+| `memory` | `{"group": "support", "generation": ["end_of_invocation", "agent"]}`. Durable memory shared by every run with the same group, in any session. |
+| `max_steps` | Cap on model steps per run. |
+| `output_format` | JSON Schema the reply must satisfy. Every object needs `"additionalProperties": false` and every property in `required`. |
+
+Credentials are never inlined. Store them (`albus secrets create NAME`) and
+reference them as `albus.sh/secrets/<name>` in `headers` or
+`model.provider.credential`. Albus resolves the reference when the run starts;
+the value never appears in a response, a revision, or the audit log.
+
+### Idempotency and retries
+
+Every run has an **invocation key**. Send it as `invocation_key`
+(`invocationKey`), which is the `Idempotency-Key` header over HTTP. The
+response returns the effective key in the same header, generated if you sent
+none. The key is unique in your organization and is how you read the run back:
+`GET /traces/{invocation_key}`.
+
+| You send | Albus does |
+|---|---|
+| A new key | Starts a run |
+| The same key, same body | Re-attaches to that run and returns its current state, even after it finished or failed |
+| The same key, different body | `409` |
+| Any key while the session is already running | `423` |
+| No key | Starts a run you cannot retry safely |
+
+Rules:
+
+- **Always send a key for unattended work.** Derive it from the thing that
+  must happen exactly once: the event id, or the session id plus a turn
+  counter (`support-1234-triage-1`). Never a timestamp or a fresh random value
+  per attempt; each one starts another run.
+- **Retry `504` with the same key.** The run is still going; the same key waits
+  on it. Retry connection failures the same way.
+- **Do not retry `400`, `402`, `409`, `423`, or `502` as-is.** They will fail
+  the same way. To rerun a failed run, use a **new** key.
+- **Pick session ids you already have.** The ticket, the pull request, the job.
+  `^[0-9a-zA-Z._:-]+$`, 2–100 characters. Reuse continues; a new id starts over.
+
+<CodeGroup>
 
 ```python Python
-import os
+from albus_sdk import errors
 
-from albus_sdk import Albus
+for _ in range(3):
+    try:
+        response = albus.sessions.run_session(
+            id="support-1234",
+            invocation_key="support-1234-triage-1",
+            user_prompt="Triage this ticket.",
+            agent_name="support-triage",
+            agent={"model": {"name": "gemini-3.6-flash"}},
+            wait_timeout_seconds=120,
+        )
+        print(response.result.message.content)
+        break
+    except errors.ErrTimeout:
+        continue                       # 504: still running, same key re-attaches
+else:
+    print("still running; poll GET /sessions/support-1234")
+```
 
-with Albus(
-    api_key=os.environ["ALBUS_API_KEY"],
-) as albus:
-    albus.secrets.create_secret(
-        name="integrations/github/token",
-        value=f"Bearer {os.environ['GITHUB_TOKEN']}",
+```typescript TypeScript
+import { ErrTimeout } from "@albus-ts/sdk/models/errors";
+
+for (let attempt = 0; attempt < 3; attempt++) {
+  try {
+    const response = await albus.sessions.runSession({
+      id: "support-1234",
+      invocationKey: "support-1234-triage-1",
+      waitTimeoutSeconds: 120,
+      body: {
+        userPrompt: "Triage this ticket.",
+        agentName: "support-triage",
+        agent: { model: { name: "gemini-3.6-flash" } },
+      },
+    });
+    console.log(response.result.message?.content);
+    break;
+  } catch (error) {
+    if (!(error instanceof ErrTimeout)) throw error; // 504: same key re-attaches
+  }
+}
+```
+
+</CodeGroup>
+
+### Status codes
+
+| Status | Meaning | Do |
+|---|---|---|
+| `400` | Invalid prompt or configuration | Fix the request |
+| `401` | Credential rejected | `albus status`, re-authenticate |
+| `402` | No credit balance | Stop; tell the user |
+| `404` | No such session, secret, agent, or revision | Check the id |
+| `409` | Key reused with a different body, or cancel with nothing running | New key, or resend the original body |
+| `410` | The run was canceled while you waited | Nothing to retry; a new key runs again |
+| `423` | The session is running another prompt | Wait, re-send the running key to attach, or use another session id |
+| `502` | Every attempt failed; body has `kind` and `detail` | Read the trace; a new key reruns |
+| `503` | Temporarily unavailable; may carry `Retry-After` | Wait and retry |
+| `504` | Wait elapsed; the run continues | Same key again, or poll |
+
+Python raises `errors.AlbusError` subclasses (`ErrTimeout`, `ErrLocked`,
+`ErrConflict`, `ErrInvocationFailed`, `ErrInvocationCanceled`,
+`ErrInsufficientCredit`, …) with `.status_code`. TypeScript throws the same
+names from `@albus-ts/sdk/models/errors` with `.statusCode`.
+
+### Read a session and its messages
+
+`GET /sessions/{id}` returns `session` and `messages` in chronological order.
+Each message has `role` (`user` or `assistant`), `content`, the
+`invocation_key` that produced it, and a `cursor`.
+
+<CodeGroup>
+
+```python Python
+page = albus.sessions.get_session(id="support-1234", limit=100)
+print(page.session.state, page.session.invocation_count, page.session.agent_revision)
+for message in page.messages:
+    print(message.role, message.content)
+while len(page.messages) == 100:
+    page = albus.sessions.get_session(
+        id="support-1234", after=str(page.messages[-1].cursor), limit=100
     )
-
-    response = albus.sessions.run_session(
-        id="repo-triage",
-        user_prompt="Find open issues mentioning login failures and summarize them.",
-        agent_name="repo-triage",
-        agent={
-            "model": {"name": "gemini-3.6-flash"},
-            "system_prompt": "You investigate GitHub issues. Cite issue numbers.",
-            "mcp_servers": [
-                {
-                    "name": "github",
-                    "url": "https://api.githubcopilot.com/mcp/",
-                    "headers": {
-                        "Authorization": "albus.sh/secrets/integrations/github/token"
-                    },
-                    "allowed_tools": ["search_issues", "get_issue"],
-                }
-            ],
-        },
-        wait_timeout_seconds=300,
-    )
-    print(response.result.message.content)
+    for message in page.messages:
+        print(message.role, message.content)
 ```
 
-### Debug a run
-
-```bash
-albus sessions get support-1234
-albus sessions audit support-1234 --limit 50 | jq '.events[] | {type, agent_revision, event_time}'
-albus agents revision support-triage "$(albus sessions get support-1234 | jq -r '.session.agent_revision')"
+```typescript TypeScript
+let page = await albus.sessions.getSession({ id: "support-1234", limit: 100 });
+console.log(page.session.state, page.session.invocationCount, page.session.agentRevision);
+for (const message of page.messages) console.log(message.role, message.content);
+while (page.messages.length === 100) {
+  page = await albus.sessions.getSession({
+    id: "support-1234",
+    after: String(page.messages.at(-1)!.cursor),
+    limit: 100,
+  });
+  for (const message of page.messages) console.log(message.role, message.content);
+}
 ```
+
+</CodeGroup>
+
+`session.state` is `RUNNING` while a turn is in flight, otherwise `DONE`,
+`FAILED`, or `CANCELED` for the last one. `session.current_invocation_key` is
+the running turn's key while `RUNNING`.
+
+### List sessions
+
+`GET /sessions` returns sessions ordered by their most recent matching run.
+Filters: `agent_name`, `agent_revision` (needs `agent_name`), `status`
+(`RUNNING`, `DONE`, `FAILED`, `CANCELED`), `invocation_key`, `since`, `until`
+(default: the last 31 days). Page size `limit` is 25 by default, 100 at most.
+
+<CodeGroup>
 
 ```python Python
-import os
-
-from albus_sdk import Albus
-
-with Albus(api_key=os.environ["ALBUS_API_KEY"]) as albus:
-    for summary in albus.traces.list_traces(
-        agent_name="support-triage", status="FAILED", limit=10
-    ).traces:
-        print(summary.invocation_key, summary.session_id, summary.started_at)
-
-    trace = albus.traces.get_trace(
-        invocation_key="support-1234-summary-v1", attempts="all"
-    ).result
-    for span in trace.spans:
-        print(span.id, span.type, span.name, span.status)
+page = albus.sessions.list_sessions(agent_name="support-triage", status="FAILED")
+for session in page.sessions:
+    print(session.id, session.state, session.updated_at)
 ```
 
-The [audit log](/guides/build-an-agent#9-the-audit-log) is what happened inside one session's runs,
-and traces are the same events across sessions with each attempt's token usage;
-`agents revision` is the exact configuration that ran it.
+```typescript TypeScript
+const page = await albus.sessions.listSessions({
+  agentName: "support-triage",
+  status: "FAILED",
+});
+for (const session of page.sessions) console.log(session.id, session.state, session.updatedAt);
+```
 
-### Fan out across sessions
+</CodeGroup>
+
+### Cancel
+
+`POST /sessions/{id}/cancel` asks the running turn to stop and returns `202`
+once the request is accepted; the run ends shortly after with state
+`CANCELED`. `409` means nothing was running. A caller still waiting on the run
+gets `410`.
+
+<CodeGroup>
+
+```python Python
+albus.sessions.cancel_session(id="support-1234")
+```
+
+```typescript TypeScript
+await albus.sessions.cancelSession({ id: "support-1234" });
+```
+
+</CodeGroup>
+
+`DELETE /sessions/{id}` removes the session and its messages. Traces and audit
+events are not messages; they stay.
+
+### Traces and spans
+
+Every run is a **trace**: its status, timing, failure, and its **spans**: the
+run (`invocation`), each `step`, the `model_call` in each step, and every
+`tool_call`, each with `input`, `output`, timings, and token `usage`. This is
+how you find out what the agent did.
+
+`GET /traces` lists runs across sessions, newest first, without spans.
+Filters: `agent_name`, `agent_revision`, `status`, `session_id`, `since`,
+`until`. `limit` defaults to 10, max 100.
+
+`GET /traces/{invocation_key}` returns one run with its spans. `attempts=final`
+(default) returns the last attempt's spans; `attempts=all` includes superseded
+attempts, whose tool calls still had their effects. `payloads=false` drops
+inputs and outputs and raises the page size from 25 to 500.
+
+<CodeGroup>
+
+```python Python
+failed = albus.traces.list_traces(agent_name="support-triage", status="FAILED", limit=10)
+for summary in failed.traces:
+    print(summary.invocation_key, summary.session_id, summary.started_at)
+
+trace = albus.traces.get_trace(invocation_key="support-1234-triage-1").result
+print(trace.status, trace.failure)
+for span in trace.spans:
+    print(span.id, span.type, span.name or "", span.status)
+    if span.type == "tool_call":
+        print("  in:", span.input)
+        print("  out:", span.output)
+```
+
+```typescript TypeScript
+const failed = await albus.traces.listTraces({
+  agentName: "support-triage",
+  status: "FAILED",
+  limit: 10,
+});
+for (const summary of failed.traces) {
+  console.log(summary.invocationKey, summary.sessionId, summary.startedAt);
+}
+
+const { result: trace } = await albus.traces.getTrace({
+  invocationKey: "support-1234-triage-1",
+});
+console.log(trace.status, trace.failure);
+for (const span of trace.spans) {
+  console.log(span.id, span.type, span.name ?? "", span.status);
+}
+```
+
+</CodeGroup>
+
+Span ids read as a path: `inv3` is the third run of the session,
+`inv3.attempt1.step2.tool1` the first tool call of its second step. Payloads
+over the limit are cut with an `[omitted: N of M bytes; sha256=…]` marker. A
+`FAILED` span carries `error`; a failed run carries `failure` with `kind`
+(`crash`, `no_progress`, `interrupted`, `internal`) and `message`. After 90
+days `spans_expired` is true and the run itself still reads.
+
+Debugging loop: run, read the trace, change the prompt or a tool, run again
+with a **new** key, compare. From a shell, `albus traces get KEY` and `albus
+traces list --agent-name NAME --status FAILED` print the same.
+
+### Audit events
+
+`GET /sessions/{id}/audit` is the security record of a session: an immutable,
+chronological list of everything that happened, arguments and results
+included. Each event has `id`, `session_id`, `invocation_key`,
+`agent_revision`, `type`, `event_time`, and a `payload` shaped by its type.
+
+| `type` | Records |
+|---|---|
+| `agent_invocation` | The request that started a run |
+| `agent_step` | One step, how it ended, how long it took |
+| `model_call` | A model call and the tool calls it requested |
+| `tool_call` | An executed tool call: arguments, response, MCP server URL |
+| `invocation_succeeded` / `invocation_failed` | How the run ended |
+| `harness_exit` | The execution environment exited |
+
+Events written before the rename keep their old names (`run_succeeded`,
+`run_failed`, `llm_call`, `tool_result`); filter on both when you care about
+history. Model output, tool arguments, and tool output are stored truncated,
+with `contentBytes`, `contentSha256`, and `contentTruncated`, so a stored value
+can be checked against the original. Secrets never appear.
+
+<CodeGroup>
+
+```python Python
+page = albus.sessions.get_session_audit(id="support-1234", limit=100)
+for event in page.events:
+    if event.type == "tool_call":
+        print(event.event_time, event.agent_revision, event.payload)
+```
+
+```typescript TypeScript
+const page = await albus.sessions.getSessionAudit({ id: "support-1234", limit: 100 });
+for (const event of page.events) {
+  if (event.type === "tool_call") console.log(event.eventTime, event.agentRevision, event.payload);
+}
+```
+
+</CodeGroup>
+
+The audit log is per session. For the same events across sessions, filtered
+by agent, revision, status, or time, use traces. From a shell: `albus sessions
+audit ID --limit 50`.
+
+### Pagination
+
+Every list is cursor-paged with `after` and `limit`.
+
+- **List responses** (`/sessions`, `/traces`, `/sessions/{id}/audit`, spans in
+  `/traces/{key}`) return `next_cursor` when there is more. Pass it as `after`.
+  No `next_cursor`, no more pages.
+- **Session messages** (`/sessions/{id}`) have no `next_cursor`. Pass the last
+  message's `cursor` as `after`; a page shorter than `limit` is the end.
+- `limit` maxima: 100 for sessions and traces, 1000 for messages and audit
+  events, 500 for spans without payloads and 25 with.
+
+<CodeGroup>
+
+```python Python
+after = None
+while True:
+    page = albus.sessions.get_session_audit(id="support-1234", after=after, limit=500)
+    for event in page.events:
+        print(event.type)
+    after = page.next_cursor
+    if not after:
+        break
+```
+
+```typescript TypeScript
+let after: string | undefined;
+do {
+  const page = await albus.sessions.getSessionAudit({ id: "support-1234", after, limit: 500 });
+  for (const event of page.events) console.log(event.type);
+  after = page.nextCursor;
+} while (after);
+```
+
+</CodeGroup>
+
+## Fan out
+
+Concurrency is across sessions. One key per unit of work, one session per
+work item.
 
 ```python Python
 import asyncio
@@ -463,47 +547,36 @@ from albus_sdk import AsyncAlbus
 TICKETS = ["support-1", "support-2", "support-3"]
 
 
-async def summarize(albus: AsyncAlbus, ticket: str) -> str:
+async def triage(albus: AsyncAlbus, ticket: str) -> str:
     response = await albus.sessions.run_session(
         id=ticket,
-        user_prompt="Summarize this ticket.",
+        invocation_key=f"{ticket}-triage-1",
+        user_prompt="Triage this ticket.",
         agent_name="support-triage",
         agent={"model": {"name": "gemini-3.6-flash"}},
-        invocation_key=f"{ticket}-summary-v1",
         wait_timeout_seconds=300,
     )
     return response.result.message.content
 
 
 async def main() -> None:
-    async with AsyncAlbus(
-        api_key=os.environ["ALBUS_API_KEY"],
-    ) as albus:
-        for summary in await asyncio.gather(
-            *(summarize(albus, ticket) for ticket in TICKETS)
-        ):
-            print(summary)
+    async with AsyncAlbus(api_key=os.environ["ALBUS_API_KEY"]) as albus:
+        for reply in await asyncio.gather(*(triage(albus, t) for t in TICKETS)):
+            print(reply)
 
 
 asyncio.run(main())
 ```
 
-<Warning>
-Each run counts against the organization's run limit. Fan out deliberately.
-</Warning>
-
-## Where the rest of the documentation is
-
-Any page is markdown at the same URL with `.md` appended.
+## Where the rest is
 
 | Need | Read |
 |---|---|
-| Full index, machine-readable | https://docs.albus.sh/llms.txt |
-| Whole corpus, one file | https://docs.albus.sh/llms-full.txt |
-| Building an agent step by step: invocation keys, tools, secrets, MCP servers, memory, traces, revisions, audit log | https://docs.albus.sh/guides/build-an-agent.md |
-| Web search, terminal, and memory | https://docs.albus.sh/guides/built-in-tools.md |
-| Bringing your own model key | https://docs.albus.sh/guides/bring-your-own-key.md |
-| Errors and fixes | https://docs.albus.sh/guides/troubleshooting.md |
+| Map of the documentation | https://docs.albus.sh/llms.txt |
+| The whole site in one file | https://docs.albus.sh/llms-full.txt |
+| Building an agent step by step: keys, tools, secrets, MCP servers, memory, traces, revisions, audit log | https://docs.albus.sh/guides/build-an-agent.md |
+| Web search, terminal, memory | https://docs.albus.sh/guides/built-in-tools.md |
+| Your own model provider account | https://docs.albus.sh/guides/bring-your-own-key.md |
 | Status codes and bodies | https://docs.albus.sh/reference/errors.md |
 | CLI reference | https://docs.albus.sh/reference/cli.md |
 | SDK reference | https://docs.albus.sh/reference/sdks.md |
