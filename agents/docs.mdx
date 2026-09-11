@@ -51,7 +51,8 @@ albus status
 `status` prints JSON: `credential` is `api_key`, `session`, or `none`;
 `authenticated` says whether Albus accepted it. It exits 0 either way; read the
 JSON. If `authenticated` is true with `credential: "api_key"`, skip to the SDK
-install; a browser session still needs an API key minted below.
+install. With `credential: "session"`, skip the sign-in and mint an API key
+below.
 
 You cannot complete a browser sign-in yourself. Print the URL, let the user
 open it:
