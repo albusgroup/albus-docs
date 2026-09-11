@@ -39,8 +39,10 @@ albus sessions get my-session | jq '.messages[-1].content'
 | `albus tokens get ID` | `GET /tokens/{id}` | |
 | `albus tokens delete ID` | `DELETE /tokens/{id}` | |
 | `albus invites create EMAIL` | `POST /invites` | Browser session only |
+| `albus traces list [--agent-name NAME] [--agent-revision REV] [--status S] [--session ID] [--since T] [--until T]` | `GET /traces` | |
+| `albus traces get INVOCATION_KEY [--attempts final\|all]` | `GET /traces/{invocation_key}` | |
 
-Traces and memories have no CLI commands yet — read them over HTTP, from the
+Memories have no CLI commands yet — read them over HTTP, from the
 [SDKs](/reference/sdks#traces-memories-and-models), or in the console.
 
 ### `sessions run` options
