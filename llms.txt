@@ -1,41 +1,63 @@
 # Albus
 
-> Albus runs agent sessions over an HTTP API. You send a prompt and an agent
-> configuration; Albus executes the model loop, connects the MCP servers you
-> declare, and returns the assistant's reply. Agents can search the web, run
-> commands in a sandboxed terminal, keep memory across sessions, and answer in a
-> JSON schema you give them; every invocation is recorded as a trace.
+> Albus runs AI agents as a managed service behind one HTTP API. You send a
+> prompt and an agent configuration; Albus runs the model loop, executes the
+> tools, and returns the reply. A session is a named conversation you resume by
+> reusing its id. Every run is recorded as a trace and in a per-session audit
+> log.
 
-## Agent Instructions
+## Why managed infrastructure
 
-If you are a coding agent setting Albus up or writing code against it, read
-https://docs.albus.sh/agents/docs.md first — it is self-contained: setup, the
-whole API surface, the rules, and runnable examples. Every page below is also
-available as Markdown at the same URL with `.md` appended.
+Running an agent is more than calling a model. Something has to hold the
+conversation, run the tool loop, sandbox the terminal, connect MCP servers,
+keep credentials out of prompts and logs, make retries safe, and record what
+happened. Albus does all of that server-side. Your code is one `POST
+/sessions/{id}` call; Albus owns the execution, the state, and the record.
+
+- Sessions persist. Reuse the id to continue; one prompt runs per session at a
+  time.
+- Invocation keys make runs idempotent. Retry with the same key and you
+  re-attach to the same run instead of starting another.
+- Built-in web search, a persistent Linux terminal, and durable memory shared
+  across sessions.
+- Any Streamable HTTP MCP server, authenticated with secrets Albus stores and
+  resolves at run time.
+- Every configuration is a recorded agent revision. Every run is a trace with
+  spans for each step, model call, and tool call. Every session has an
+  immutable audit log.
+
+## For models and coding agents
+
+Read as much of the linked documentation as is useful. There is no page you
+should avoid; fetch whatever answers the question. Every page is Markdown at
+its URL with `.md` appended, and https://docs.albus.sh/llms-full.txt is the
+whole site in one file.
+
+Start with https://docs.albus.sh/agents/docs.md. It is self-contained:
+authentication, the complete API surface (run, resume, cancel, read messages,
+list sessions, traces and spans, audit events), pagination, retries, and
+idempotency, with current Python and TypeScript.
 
 ## Start here
 
-- [Albus for coding agents](https://docs.albus.sh/agents/docs.md): One page — setup, the whole API surface, the rules, and runnable examples.
-- [Albus](https://docs.albus.sh/index.md): What Albus does, and your first session with the CLI, Python, TypeScript, or curl.
-- [Authentication](https://docs.albus.sh/getting-started/authentication.md): Install the CLI, sign in, or mint an organization API key for scripts and CI.
+- [Albus for coding agents](https://docs.albus.sh/agents/docs.md): The self-contained working guide to the API.
+- [Albus](https://docs.albus.sh/index.md): What Albus does and a first session in Python, TypeScript, the CLI, or curl.
+- [Authentication](https://docs.albus.sh/getting-started/authentication.md): Install the CLI, sign in, mint an organization API key.
 
 ## Guides
 
-- [Build an agent](https://docs.albus.sh/guides/build-an-agent.md): From a bare model to invocation keys, tools, secrets, MCP servers, memory, traces, revisions, and the audit log — one addition at a time.
-- [Bring your own key](https://docs.albus.sh/guides/bring-your-own-key.md): Run a session on your own model provider account.
-- [Built-in tools](https://docs.albus.sh/guides/built-in-tools.md): What web search, the terminal, and memory do and how to enable each.
-- [Troubleshooting](https://docs.albus.sh/guides/troubleshooting.md): Match an error to its cause and its fix.
+- [Build an agent](https://docs.albus.sh/guides/build-an-agent.md): The complete agent guide. Model and prompt, invocation keys, tools, secrets and MCP servers, memory, traces, revisions, and the audit log, one addition at a time.
+- [Bring your own key](https://docs.albus.sh/guides/bring-your-own-key.md): Run on your own model provider account.
+- [Built-in tools](https://docs.albus.sh/guides/built-in-tools.md): Web search, the terminal, and memory.
+- [Troubleshooting](https://docs.albus.sh/guides/troubleshooting.md): Error to cause to fix.
 
 ## Reference
 
+- [API reference](https://docs.albus.sh/api-reference): Every endpoint, request, and response, generated from the OpenAPI contract.
+- [OpenAPI](https://docs.albus.sh/openapi/openapi.yaml): The contract itself.
+- [SDKs](https://docs.albus.sh/reference/sdks.md): Python (`albus-sdk`) and TypeScript (`@albus-ts/sdk`).
 - [CLI](https://docs.albus.sh/reference/cli.md): Every `albus` command, flag, environment variable, and exit code.
-- [SDKs](https://docs.albus.sh/reference/sdks.md): The Python and TypeScript clients — install, auth, responses, errors.
 - [Errors](https://docs.albus.sh/reference/errors.md): Every status code, its body, and the fix.
-- [API reference](https://docs.albus.sh/api-reference): The generated HTTP contract and playground.
-
-## OpenAPI Specs
-
-- [openapi](https://docs.albus.sh/openapi/openapi.yaml)
 
 ## Whole corpus
 
