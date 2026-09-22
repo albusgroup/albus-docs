@@ -297,8 +297,9 @@ the model, and dispatches the calls. Nothing runs on your machine. The server
 must speak **Streamable HTTP** at a public `http(s)` URL; `stdio` servers need
 an HTTP front.
 
-A server *you* host needs no header at all: without one, Albus sends a signed
-identity token your server verifies against your organization's issuer. See
+A server you host yourself needs no `headers` entry: when `headers` has no
+`Authorization` entry, Albus sends a signed identity token, which your server
+verifies against your organization's issuer. See
 [Authenticate Albus to your MCP server](/guides/mcp-server-auth).
 
 | Field | Meaning |
