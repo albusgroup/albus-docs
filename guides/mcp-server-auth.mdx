@@ -188,10 +188,11 @@ Shield all take exactly these inputs.
 
 ### Serving several organizations
 
-If your server is used by more than one Albus organization, accept a list of
-issuers and look each one's JWKS up by issuer. The prefix
-`https://oidc.albus.sh/organizations/` says the token is from Albus; the rest of
-the path says which customer.
+If your server is used by more than one Albus organization, keep an allowlist
+of the issuers you trust and configure a verifier for each one. Pick the
+verifier by the token's `iss` only when that value is in the allowlist; never
+fetch a JWKS from an issuer you did not configure, because whoever controls the
+`iss` value then controls the signing key.
 
 ## 4. Use your own identity provider
 
@@ -211,15 +212,20 @@ printf '%s' "$CLIENT_SECRET" | albus secrets create idp/acme-mcp/client-secret
 
 ```json agent.json
 {
-  "name": "acme",
-  "url": "https://mcp.acme.com/api/mcp",
-  "auth": { // [!code ++]
-    "type": "oauth2_client_credentials", // [!code ++]
-    "token_url": "https://acme.us.auth0.com/oauth/token", // [!code ++]
-    "client_id": "albus-agents", // [!code ++]
-    "client_secret": "albus.sh/secrets/idp/acme-mcp/client-secret", // [!code ++]
-    "audience": "https://mcp.acme.com/api/mcp" // [!code ++]
-  } // [!code ++]
+  "model": { "name": "gemini-3.6-flash" },
+  "mcp_servers": [
+    {
+      "name": "acme",
+      "url": "https://mcp.acme.com/api/mcp",
+      "auth": { // [!code ++]
+        "type": "oauth2_client_credentials", // [!code ++]
+        "token_url": "https://acme.us.auth0.com/oauth/token", // [!code ++]
+        "client_id": "albus-agents", // [!code ++]
+        "client_secret": "albus.sh/secrets/idp/acme-mcp/client-secret", // [!code ++]
+        "audience": "https://mcp.acme.com/api/mcp" // [!code ++]
+      } // [!code ++]
+    }
+  ]
 }
 ```
 
