@@ -450,9 +450,11 @@ the header to the complete agent configuration.
 </CodeGroup>
 
 Albus sends the header value unchanged and does not refresh the access token.
-Mint a token whose lifetime exceeds the run. Literal headers are stored in the
-agent revision: anyone who can read the revision can read the token, which
-remains usable until expiry. Keep the token lifetime short.
+Mint a token whose lifetime exceeds the run. A literal header value is not
+stored: the agent revision records the header name with the value
+`"<literal>"`, so a token minted per run does not create a new revision, and a
+retry with the same idempotency key and a freshly minted token re-attaches to
+the original run.
 
 ### Vercel Deployment Protection
 
