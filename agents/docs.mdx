@@ -201,10 +201,13 @@ agent, you name one. Fields:
 | `max_steps` | Cap on model steps per run. |
 | `output_format` | JSON Schema the reply must satisfy. Every object needs `"additionalProperties": false` and every property in `required`. |
 
-Credentials are never inlined. Store them (`albus secrets create NAME`) and
-reference them as `albus.sh/secrets/<name>` in `headers` or
+Long-lived credentials are never inlined. Store them (`albus secrets create
+NAME`) and reference them as `albus.sh/secrets/<name>` in `headers` or
 `model.provider.credential`. Albus resolves the reference when the run starts;
-the value never appears in a response, a revision, or the audit log.
+the value never appears in a response, a revision, or the audit log. The one
+exception is a short-lived access token passed as a literal
+`headers.Authorization` value: the literal is stored in the agent revision and
+is readable there until the token expires, so keep its lifetime to minutes.
 
 ### Idempotency and retries
 
