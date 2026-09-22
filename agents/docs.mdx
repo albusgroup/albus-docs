@@ -204,10 +204,11 @@ agent, you name one. Fields:
 Long-lived credentials are never inlined. Store them (`albus secrets create
 NAME`) and reference them as `albus.sh/secrets/<name>` in `headers` or
 `model.provider.credential`. Albus resolves the reference when the run starts;
-the value never appears in a response, a revision, or the audit log. The one
-exception is a short-lived access token passed as a literal
-`headers.Authorization` value: the literal is stored in the agent revision and
-is readable there until the token expires, so keep its lifetime to minutes.
+the value never appears in a response, a revision, or the audit log. A
+literal MCP header value, such as a short-lived access token minted before the
+run, is sent as is and is not stored either: the revision records the header
+name with the value `"<literal>"`, so a token minted per run does not create a
+new revision.
 
 ### Idempotency and retries
 
@@ -221,7 +222,7 @@ none. The key is unique in your organization and is how you read the run back:
 |---|---|
 | A new key | Starts a run |
 | The same key, same body | Re-attaches to that run and returns its current state, even after it finished or failed |
-| The same key, different body | `409` |
+| The same key, different body | `409`. A body that differs only in a literal MCP header value, such as a re-minted token, is the same body |
 | A different key while the session is already running | `423` |
 | No key | Starts a run you cannot retry safely |
 
