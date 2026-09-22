@@ -1,6 +1,6 @@
 ---
 title: Authenticate Albus to your MCP server
-description: Every call from an Albus agent carries a signed identity token your server verifies offline — or bring your own identity provider, a static token, or a custom header.
+description: Every call from an Albus agent carries a signed identity token your server verifies offline — or bring your own identity provider, a token you mint per run, a static token, or a custom header.
 ---
 
 When an agent calls an MCP server you declared, Albus authenticates to it. By
@@ -295,7 +295,96 @@ at least 10 minutes or the launch fails. If it expires during a long run, the
 server's `401`s appear in the audit log as `mcp_auth_rejected` and as tool
 errors the model sees.
 
-## 5. Static bearer token
+## 5. Mint a token per run
+
+If the caller already holds credentials for the server's identity provider,
+skip the client-credentials exchange: obtain a short-lived token yourself
+immediately before the run and pass it as the `Authorization` header. Nothing
+is stored with Albus and the server needs no Albus-specific configuration —
+it keeps trusting the provider it trusts today.
+
+Because the value changes every run, pass it as a literal rather than a secret
+reference; a token that expires in minutes does not need one.
+
+<CodeGroup>
+
+```bash CLI
+TOKEN=$(curl -s -X POST https://acme.us.auth0.com/oauth/token \
+  -d grant_type=client_credentials -d client_id="$CLIENT_ID" \
+  -d client_secret="$CLIENT_SECRET" -d audience=https://mcp.acme.com/api/mcp \
+  | jq -r .access_token)
+
+cat > agent.json <<EOF
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "mcp_servers": [
+    {
+      "name": "acme",
+      "url": "https://mcp.acme.com/api/mcp",
+      "headers": { "Authorization": "Bearer $TOKEN" }
+    }
+  ]
+}
+EOF
+
+albus sessions run support-1234 -p "List your tools." \
+  --agent-name support-triage --agent-file agent.json
+```
+
+```python Python
+token = get_access_token()  # your provider's client; valid for the whole run
+
+response = albus.sessions.run_session(
+    id="support-1234",
+    agent_name="support-triage",
+    user_prompt="List your tools.",
+    agent={
+        "model": {"name": "gemini-3.6-flash"},
+        "mcp_servers": [
+            {
+                "name": "acme",
+                "url": "https://mcp.acme.com/api/mcp",
+                "headers": {"Authorization": f"Bearer {token}"},  # [!code ++]
+            }
+        ],
+    },
+    wait_timeout_seconds=120,
+)
+```
+
+```typescript TypeScript
+const token = await getAccessToken(); // your provider's client; valid for the whole run
+
+const response = await albus.sessions.runSession({
+  id: "support-1234",
+  waitTimeoutSeconds: 120,
+  body: {
+    agentName: "support-triage",
+    userPrompt: "List your tools.",
+    agent: {
+      model: { name: "gemini-3.6-flash" },
+      mcpServers: [
+        {
+          name: "acme",
+          url: "https://mcp.acme.com/api/mcp",
+          headers: { Authorization: `Bearer ${token}` }, // [!code ++]
+        },
+      ],
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+An `Authorization` header turns the default identity token off (see
+[section 7](#7-other-header-schemes)); pass the complete value, scheme
+included. Albus sends it unchanged for the whole run and does not refresh it,
+so mint a token that outlives the run. The header is part of the agent
+configuration you send, so keep the lifetime short: whoever can read the run's
+configuration can read the token until it expires.
+
+## 6. Static bearer token
 
 If the server accepts a fixed token as `Authorization: Bearer <token>`, store
 it as a secret and reference it:
@@ -310,7 +399,7 @@ it as a secret and reference it:
 
 The secret value is the token only — no `Bearer` prefix.
 
-## 6. Other header schemes
+## 7. Other header schemes
 
 Anything that is not a Bearer token is a plain `headers` entry: a key in a
 custom header such as `X-API-Key`, GitHub's `Authorization: token …`, or
@@ -337,7 +426,7 @@ app, not authorization: the bypass header gets the request to your handler,
 and the identity token check in the handler is still what authorizes it. Use
 both — the bypass header in `headers`, the default `auth` untouched.
 
-## 7. Key rotation and caching
+## 8. Key rotation and caching
 
 Signing keys rotate without notice. Every key carries a `kid`, new keys are
 published in the JWKS before they sign anything, and old keys stay published
@@ -360,9 +449,9 @@ the JWKS for longer than the documents say.
 - **Your own `Authorization` header.** It is sent verbatim; the value must be
   the complete header value, scheme included (`Bearer <token>`, `token
   <token>`).
-- **OAuth token expired mid-run.** The token from `token_url` is not refreshed.
-  Ask your provider for longer-lived client-credentials tokens, or keep runs
-  shorter than the token.
+- **Token expired mid-run.** Neither the token from `token_url` nor one you
+  passed in `headers` is refreshed. Ask your provider for a longer-lived token,
+  or keep runs shorter than the token.
 
 **The run fails before its first step, naming the server**
 
