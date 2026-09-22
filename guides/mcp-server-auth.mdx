@@ -3,23 +3,23 @@ title: Authenticate Albus to your MCP server
 description: Choose Albus identity JWTs, OAuth client credentials, static bearer tokens, or custom headers for your hosted MCP server.
 ---
 
-## 1. Authentication mechanisms
+## Authentication mechanisms
 
 Albus supports four mechanisms for authenticating requests from the Albus
 platform to your hosted MCP servers:
 
 | Mechanism | Use when |
 |---|---|
-| [Albus identity JWT (default)](#2-albus-identity-jwt-default) | Your server can verify tokens issued by Albus for your organization. No shared secret is required. |
-| [OAuth 2.0 client credentials](#3-oauth-2-0-client-credentials) | Your server already trusts an identity provider, and Albus should obtain an access token from the provider at launch. |
-| [Static bearer token](#4-static-bearer-token) | Your server accepts a fixed token in `Authorization: Bearer <token>`. |
-| [Custom headers](#5-custom-headers) | Your server requires an API key, another authorization scheme, a deployment bypass header, or an access token minted by the caller before the run. |
+| [Albus identity JWT (default)](#1-albus-identity-jwt-default) | Your server can verify tokens issued by Albus for your organization. No shared secret is required. |
+| [OAuth 2.0 client credentials](#2-oauth-2-0-client-credentials) | Your server already trusts an identity provider, and Albus should obtain an access token from the provider at launch. |
+| [Static bearer token](#3-static-bearer-token) | Your server accepts a fixed token in `Authorization: Bearer <token>`. |
+| [Custom headers](#4-custom-headers) | Your server requires an API key, another authorization scheme, a deployment bypass header, or an access token minted by the caller before the run. |
 
 The default example below provides the complete agent configuration and run
 request. Each alternative shows a diff against the default MCP server entry;
 apply only the diff for the mechanism your server requires.
 
-## 2. Albus identity JWT (default)
+## 1. Albus identity JWT (default)
 
 Use the default mechanism to authenticate Albus without provisioning a shared
 secret or registering Albus as a client with your identity provider.
@@ -242,7 +242,7 @@ response's cache headers.
 </Accordion>
 </AccordionGroup>
 
-## 3. OAuth 2.0 client credentials
+## 2. OAuth 2.0 client credentials
 
 If your server already requires tokens from Auth0, Okta, WorkOS, or another
 OAuth 2.0 provider, use `oauth2_client_credentials` to keep the server's
@@ -317,7 +317,7 @@ the launch fails. If the access token expires during a long run, every `401`
 from the server appears in the audit log as `mcp_auth_rejected` and as a tool
 error visible to the model.
 
-## 4. Static bearer token
+## 3. Static bearer token
 
 Use `bearer` when your server accepts a fixed access token and does not need
 an identity provider exchange. Albus resolves the secret at launch and sends
@@ -360,7 +360,7 @@ printf '%s' "$MCP_TOKEN" | albus secrets create acme-mcp-token
 
 `auth.token` must be a secret reference; a raw token is rejected.
 
-## 5. Custom headers
+## 4. Custom headers
 
 Use `headers` when your server requires an API key in a custom header,
 another authorization scheme, or a token the caller obtains before the run.
