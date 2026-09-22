@@ -49,6 +49,7 @@ idempotency, with current Python and TypeScript.
 - [Build an agent](https://docs.albus.sh/guides/build-an-agent.md): The complete agent guide. Model and prompt, invocation keys, tools, secrets and MCP servers, memory, traces, revisions, and the audit log, one addition at a time.
 - [Bring your own key](https://docs.albus.sh/guides/bring-your-own-key.md): Run on your own model provider account.
 - [Built-in tools](https://docs.albus.sh/guides/built-in-tools.md): Web search, the terminal, and memory.
+- [Authenticate Albus to your MCP server](https://docs.albus.sh/guides/mcp-server-auth.md): Verify the identity token Albus sends, or use your own identity provider, a static token, or a custom header.
 - [Troubleshooting](https://docs.albus.sh/guides/troubleshooting.md): Error to cause to fix.
 
 ## Reference
