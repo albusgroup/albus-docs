@@ -1,0 +1,492 @@
+---
+title: Authenticate Albus to your MCP server
+description: Every call from an Albus agent carries a signed identity token your server verifies offline — or bring your own identity provider, a token you mint per run, a static token, or a custom header.
+---
+
+When an agent calls an MCP server declared in `mcp_servers`, Albus
+authenticates to the server. By default Albus sends a short-lived **identity
+token**: a JWT signed by Albus, issued for your organization and for that one
+server. Your server verifies the identity token the way it would verify a
+token from any OpenID provider — by issuer, audience, and signature. No
+setup is shared in advance: no account with Albus, no client registration, no
+shared secret.
+
+If your server already sits behind an identity provider or expects a key of
+its own, sections 4 through 7 describe the alternatives: OAuth 2.0 client
+credentials, a token minted per run, a static bearer token, and custom
+headers.
+
+## 1. Declare the server
+
+A server entry with no `auth` field defaults to
+`"auth": {"type": "albus_identity_jwt"}`: every request to the server
+includes the header `Authorization: Bearer <token>`, where `<token>` is an
+identity token minted by Albus. Section 2 describes the identity token.
+
+<CodeGroup>
+
+```json agent.json
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "mcp_servers": [
+    { "name": "acme", "url": "https://mcp.acme.com/api/mcp" }
+  ]
+}
+```
+
+```bash CLI
+albus sessions run support-1234 -p "List your tools." \
+  --agent-name support-triage --agent-file agent.json
+```
+
+```python Python
+response = albus.sessions.run_session(
+    id="support-1234",
+    agent_name="support-triage",
+    user_prompt="List your tools.",
+    agent={
+        "model": {"name": "gemini-3.6-flash"},
+        "mcp_servers": [
+            {"name": "acme", "url": "https://mcp.acme.com/api/mcp"}
+        ],
+    },
+    wait_timeout_seconds=120,
+)
+```
+
+```typescript TypeScript
+const response = await albus.sessions.runSession({
+  id: "support-1234",
+  waitTimeoutSeconds: 120,
+  body: {
+    agentName: "support-triage",
+    userPrompt: "List your tools.",
+    agent: {
+      model: { name: "gemini-3.6-flash" },
+      mcpServers: [{ name: "acme", url: "https://mcp.acme.com/api/mcp" }],
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+## 2. What the token proves
+
+The identity token is an ES256 JWT with exactly the following six claims:
+
+```json
+{
+  "iss": "https://oidc.albus.sh/organizations/42",
+  "aud": "https://mcp.acme.com/api/mcp",
+  "sub": "0d4f2f9a-6c1e-4b7e-9a3b-8f1c2d3e4f50",
+  "session": "7b1a9c2e-3d4f-4a5b-8c6d-9e0f1a2b3c4d",
+  "iat": 1758500000,
+  "exp": 1758504500
+}
+```
+
+| Claim | Meaning |
+|---|---|
+| `iss` | Your organization's issuer, `https://oidc.albus.sh/organizations/<org-id>`. Every organization has a distinct issuer, so a token issued for another Albus organization never verifies against your verifier — the issuer is the tenant check. The console shows the issuer under **Settings → Organization**; the API returns the issuer as `Organization.issuer`. |
+| `aud` | The exact `url` string declared for the server. A token minted for one server is rejected by the verifier of every other server. |
+| `sub`, `session` | The invocation id and the session id of the run making the call, for audit logs and per-session limits. |
+| `iat`, `exp` | Issue and expiry time. The identity token is minted once per invocation and is valid for about 75 minutes. |
+
+The issuer serves the standard discovery documents, public and cached for one
+hour:
+
+- `<issuer>/.well-known/openid-configuration`
+- `<issuer>/.well-known/jwks.json`
+
+A verifier needs three values — the **issuer**, the **JWKS** (or discovery) URL,
+and the **audience** — and no other configuration.
+
+## 3. Verify it
+
+### Next.js on Vercel with `mcp-handler`
+
+`withMcpAuth` from `mcp-handler` calls your verifier function with the bearer
+token and answers `401` when the verifier function returns `undefined`.
+Verify the token with `jose`:
+
+```bash
+npm install jose
+```
+
+```typescript app/api/mcp/route.ts
+import type { AuthInfo } from "@modelcontextprotocol/server";
+import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createMcpHandler, withMcpAuth } from "mcp-handler";
+
+const ALBUS_ISSUER = "https://oidc.albus.sh/organizations/42"; // Settings → Organization
+const THIS_SERVER = "https://mcp.acme.com/api/mcp"; // the url in your agent config
+const ALBUS_JWKS = createRemoteJWKSet(
+  new URL(`${ALBUS_ISSUER}/.well-known/jwks.json`),
+);
+
+const verifyToken = async (
+  _req: Request,
+  bearerToken?: string,
+): Promise<AuthInfo | undefined> => {
+  if (!bearerToken) return undefined;
+  try {
+    const { payload } = await jwtVerify(bearerToken, ALBUS_JWKS, {
+      issuer: ALBUS_ISSUER,
+      audience: THIS_SERVER,
+      algorithms: ["ES256"],
+    });
+    return {
+      token: bearerToken,
+      clientId: ALBUS_ISSUER,
+      scopes: [],
+      extra: { session: payload.session, invocation: payload.sub },
+    };
+  } catch {
+    return undefined;
+  }
+};
+
+const handler = createMcpHandler((server) => {
+  // server.registerTool(...)
+});
+
+const authHandler = withMcpAuth(handler, verifyToken, { required: true });
+
+export { authHandler as GET, authHandler as POST };
+```
+
+`jwtVerify` checks the signature against the JWKS and validates the `exp`,
+`iss`, and `aud` claims. Tool handlers read the session id and invocation id
+from `ctx.http?.authInfo.extra`.
+
+### Go with `coreos/go-oidc`
+
+`oidc.NewProvider` reads the discovery document from the issuer; the
+`ClientID` field of `oidc.Config` is the expected audience.
+
+```go
+import "github.com/coreos/go-oidc/v3/oidc"
+
+provider, err := oidc.NewProvider(ctx, "https://oidc.albus.sh/organizations/42")
+if err != nil {
+    return err
+}
+
+verifier := provider.Verifier(&oidc.Config{
+    ClientID: "https://mcp.acme.com/api/mcp", // the url in your agent config
+})
+
+token, err := verifier.Verify(ctx, bearerToken) // signature, exp, iss, aud
+```
+
+### Behind a gateway
+
+Add a JWT provider to the gateway with the following three values:
+
+| Setting | Value |
+|---|---|
+| Issuer | `https://oidc.albus.sh/organizations/<org-id>` |
+| JWKS URI | `https://oidc.albus.sh/organizations/<org-id>/.well-known/jwks.json` |
+| Audience | The server's `url`, exactly as declared |
+
+Envoy `jwt_authn`, Kong, AWS API Gateway JWT authorizers, and Cloudflare API
+Shield all take exactly these three inputs.
+
+### Serving several organizations
+
+If your server is used by more than one Albus organization, keep an allowlist
+of the issuers you trust and configure a verifier for each issuer. Select the
+verifier by the token's `iss` claim only when the `iss` value is in the
+allowlist. Never fetch a JWKS from an issuer you did not configure: whoever
+controls the `iss` value would then control the signing key.
+
+## 4. Use your own identity provider
+
+If your server already requires tokens from Auth0, Okta, WorkOS, or another
+OAuth 2.0 provider, configure `auth` with type `oauth2_client_credentials` and
+Albus obtains an access token with the client credentials grant. Albus calls
+`token_url` when the run starts and sends the returned access token as
+`Authorization: Bearer <access-token>`; your server verifies the access token
+against your provider exactly as it does today.
+
+Store the client secret as an Albus secret first (`client_id` may be a secret
+reference or a literal):
+
+```bash
+printf '%s' "$CLIENT_SECRET" | albus secrets create idp/acme-mcp/client-secret
+```
+
+<CodeGroup>
+
+```json agent.json
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "mcp_servers": [
+    {
+      "name": "acme",
+      "url": "https://mcp.acme.com/api/mcp",
+      "auth": { // [!code ++]
+        "type": "oauth2_client_credentials", // [!code ++]
+        "token_url": "https://acme.us.auth0.com/oauth/token", // [!code ++]
+        "client_id": "albus-agents", // [!code ++]
+        "client_secret": "albus.sh/secrets/idp/acme-mcp/client-secret", // [!code ++]
+        "audience": "https://mcp.acme.com/api/mcp" // [!code ++]
+      } // [!code ++]
+    }
+  ]
+}
+```
+
+```python Python
+response = albus.sessions.run_session(
+    id="support-1234",
+    agent_name="support-triage",
+    user_prompt="List your tools.",
+    agent={
+        "model": {"name": "gemini-3.6-flash"},
+        "mcp_servers": [
+            {
+                "name": "acme",
+                "url": "https://mcp.acme.com/api/mcp",
+                "auth": {  # [!code ++]
+                    "type": "oauth2_client_credentials",  # [!code ++]
+                    "token_url": "https://acme.us.auth0.com/oauth/token",  # [!code ++]
+                    "client_id": "albus-agents",  # [!code ++]
+                    "client_secret": "albus.sh/secrets/idp/acme-mcp/client-secret",  # [!code ++]
+                    "audience": "https://mcp.acme.com/api/mcp",  # [!code ++]
+                },  # [!code ++]
+            }
+        ],
+    },
+    wait_timeout_seconds=120,
+)
+```
+
+```typescript TypeScript
+const response = await albus.sessions.runSession({
+  id: "support-1234",
+  waitTimeoutSeconds: 120,
+  body: {
+    agentName: "support-triage",
+    userPrompt: "List your tools.",
+    agent: {
+      model: { name: "gemini-3.6-flash" },
+      mcpServers: [
+        {
+          name: "acme",
+          url: "https://mcp.acme.com/api/mcp",
+          auth: { // [!code ++]
+            type: "oauth2_client_credentials", // [!code ++]
+            tokenUrl: "https://acme.us.auth0.com/oauth/token", // [!code ++]
+            clientId: "albus-agents", // [!code ++]
+            clientSecret: "albus.sh/secrets/idp/acme-mcp/client-secret", // [!code ++]
+            audience: "https://mcp.acme.com/api/mcp", // [!code ++]
+          }, // [!code ++]
+        },
+      ],
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+| Field | Meaning |
+|---|---|
+| `token_url` | The provider's token endpoint. Must be a public HTTPS URL. |
+| `client_id` | A secret reference or a literal. |
+| `client_secret` | A secret reference; a raw value is rejected. |
+| `audience`, `scopes` | Optional; passed to the provider as given. |
+
+Albus obtains the access token once, at launch, and does not refresh the access
+token during the run. The access token must be valid for at least 10 minutes or
+the launch fails. If the access token expires during a long run, every `401`
+from the server appears in the audit log as `mcp_auth_rejected` and as a tool
+error visible to the model.
+
+## 5. Mint a token per run
+
+If the caller of `run_session` already holds credentials for the server's
+identity provider, the caller can obtain a short-lived access token
+immediately before the run and pass the access token in
+`headers.Authorization`. No credential is stored with Albus, and the server
+needs no Albus-specific configuration: the server keeps verifying tokens
+against the identity provider it already trusts.
+
+Because the access token changes every run, pass the access token as a literal
+header value rather than as a secret reference. A token that expires within
+minutes does not need to be stored as a secret.
+
+<CodeGroup>
+
+```bash CLI
+TOKEN=$(curl -s -X POST https://acme.us.auth0.com/oauth/token \
+  -d grant_type=client_credentials -d client_id="$CLIENT_ID" \
+  -d client_secret="$CLIENT_SECRET" -d audience=https://mcp.acme.com/api/mcp \
+  | jq -r .access_token)
+
+cat > agent.json <<EOF
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "mcp_servers": [
+    {
+      "name": "acme",
+      "url": "https://mcp.acme.com/api/mcp",
+      "headers": { "Authorization": "Bearer $TOKEN" }
+    }
+  ]
+}
+EOF
+
+albus sessions run support-1234 -p "List your tools." \
+  --agent-name support-triage --agent-file agent.json
+```
+
+```python Python
+token = get_access_token()  # your provider's client; valid for the whole run
+
+response = albus.sessions.run_session(
+    id="support-1234",
+    agent_name="support-triage",
+    user_prompt="List your tools.",
+    agent={
+        "model": {"name": "gemini-3.6-flash"},
+        "mcp_servers": [
+            {
+                "name": "acme",
+                "url": "https://mcp.acme.com/api/mcp",
+                "headers": {"Authorization": f"Bearer {token}"},  # [!code ++]
+            }
+        ],
+    },
+    wait_timeout_seconds=120,
+)
+```
+
+```typescript TypeScript
+const token = await getAccessToken(); // your provider's client; valid for the whole run
+
+const response = await albus.sessions.runSession({
+  id: "support-1234",
+  waitTimeoutSeconds: 120,
+  body: {
+    agentName: "support-triage",
+    userPrompt: "List your tools.",
+    agent: {
+      model: { name: "gemini-3.6-flash" },
+      mcpServers: [
+        {
+          name: "acme",
+          url: "https://mcp.acme.com/api/mcp",
+          headers: { Authorization: `Bearer ${token}` }, // [!code ++]
+        },
+      ],
+    },
+  },
+});
+```
+
+</CodeGroup>
+
+A `headers.Authorization` entry disables the default identity token (see
+[section 7](#7-other-header-schemes)). Pass the complete header value,
+scheme included: `Bearer <access-token>`. Albus sends the header value
+unchanged for the whole run and does not refresh the access token, so mint an
+access token whose lifetime exceeds the run. The header value is part of the
+agent configuration in the request and is stored in the resulting agent
+revision, so keep the lifetime short: anyone who can read the agent revision
+can read the access token until the access token expires.
+
+## 6. Static bearer token
+
+If the server accepts a fixed token as `Authorization: Bearer <token>`, store
+the token as an Albus secret and reference the secret in `auth`:
+
+```json
+{
+  "name": "acme",
+  "url": "https://mcp.acme.com/api/mcp",
+  "auth": { "type": "bearer", "token": "albus.sh/secrets/acme-mcp-token" }
+}
+```
+
+The secret value is the token only, without the `Bearer` prefix.
+
+## 7. Other header schemes
+
+Any scheme other than a Bearer token is configured as a `headers` entry: a key
+in a custom header such as `X-API-Key`, GitHub's `Authorization: token …`, or
+Vercel's `x-vercel-protection-bypass`.
+
+```json
+{
+  "name": "acme",
+  "url": "https://mcp.acme.com/api/mcp",
+  "headers": {
+    "X-API-Key": "albus.sh/secrets/acme-api-key",
+    "x-vercel-protection-bypass": "albus.sh/secrets/acme-vercel-bypass"
+  }
+}
+```
+
+Headers other than `Authorization` combine with any `auth` mode. An
+`Authorization` entry in `headers` (in any casing) disables the default
+identity token and is sent verbatim, so the value must be the complete header
+value, scheme included. A request with both an explicit `auth` block and a
+`headers.Authorization` entry is rejected.
+
+**Vercel Deployment Protection** is an infrastructure gate in front of your
+app, not authorization: the `x-vercel-protection-bypass` header lets the
+request reach your handler, and the identity token check in the handler is
+still what authorizes the request. Use both: the bypass header in `headers`,
+and `auth` left at its default.
+
+## 8. Key rotation and caching
+
+Signing keys rotate without notice. Every key carries a `kid`, a new key is
+published in the JWKS before the new key signs any token, and an old key stays
+published until every token the old key signed has expired. A library that
+selects the key by `kid` and refetches the JWKS on an unknown `kid` — `jose`,
+`go-oidc`, and every mainstream gateway — handles rotation without further
+configuration. Do not pin a key, and do not cache the JWKS for longer than the
+JWKS response's cache headers allow.
+
+## Troubleshooting
+
+**The server answers `401` and the audit log shows `mcp_auth_rejected`**
+
+- **Identity token, verifier not configured for the issuer.** Check that the
+  verifier's issuer is `https://oidc.albus.sh/organizations/<your org id>`
+  (the value under **Settings → Organization**) and that the verifier's JWKS
+  URL is under that issuer.
+- **Audience mismatch.** The `aud` claim is the `url` string from the agent
+  configuration, byte for byte. A verifier expecting
+  `https://mcp.acme.com/api/mcp` rejects a token for
+  `https://mcp.acme.com/api/mcp/` or `…/api/mcp?v=2`. Make the declared `url`
+  and the verifier's audience identical, including trailing slash and query.
+- **Custom `Authorization` header.** The header value is sent verbatim; the
+  value must be the complete header value, scheme included (`Bearer <token>`,
+  `token <token>`).
+- **Token expired mid-run.** Neither the access token from `token_url` nor an
+  access token passed in `headers.Authorization` is refreshed. Request a
+  longer-lived token from your provider, or keep runs shorter than the token's
+  lifetime.
+
+**The run fails before its first step, naming the server**
+
+The access token returned by `token_url` was valid for under 10 minutes, or
+`token_url` is not a public HTTPS endpoint.
+
+**`400` on the request**
+
+The request contained both an `auth` block and a `headers.Authorization`
+entry, or `client_secret` (for `oauth2_client_credentials`) or `token` (for
+`bearer`) is not a secret reference.
+
+## Where next
+
+- [Build an agent](/guides/build-an-agent#4-add-a-secret-and-an-mcp-server) —
+  declaring MCP servers, secrets, and `allowed_tools`.
+- [Troubleshooting](/guides/troubleshooting#secrets-and-mcp) — every error
+  Albus reports around secrets and MCP.

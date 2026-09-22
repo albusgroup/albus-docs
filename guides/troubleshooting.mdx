@@ -98,10 +98,18 @@ Either the tool is not in `allowed_tools` (omit the field to allow all of them),
 or the prompt gave the model no reason to call it. `albus sessions audit` shows
 which tools were called.
 
-**The MCP server rejects Albus's calls**
-The header value is wrong. Store the *complete* header value including any scheme
-— `Bearer <token>`, not `<token>`. Confirm the server speaks Streamable HTTP at
-the URL you gave; `stdio` servers cannot be reached.
+**The MCP server rejects Albus's calls** (`mcp_auth_rejected` in the audit log)
+One of three causes. With the default identity token, the server's verifier is
+not configured for your issuer (`https://oidc.albus.sh/organizations/<org-id>`,
+under **Settings → Organization**), or the verifier's audience differs from the
+declared `url` — trailing slash and query included. With a `headers.Authorization`
+entry, the header value is wrong — pass the complete header value including the
+scheme, `Bearer <token>`, not `<token>` — or the access token minted for the run
+has expired. With `oauth2_client_credentials`, the access token obtained at
+launch has expired. Albus refreshes neither token during a run. Details in
+[Authenticate Albus to your MCP server](/guides/mcp-server-auth). Separately,
+confirm the server speaks Streamable HTTP at the URL you gave; `stdio` servers
+cannot be reached.
 
 ## Installation
 

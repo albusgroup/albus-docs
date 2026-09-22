@@ -31,6 +31,7 @@
           "guides/build-an-agent",
           "guides/bring-your-own-key",
           "guides/built-in-tools",
+          "guides/mcp-server-auth",
           "guides/troubleshooting"
         ]
       },

@@ -196,15 +196,18 @@ agent, you name one. Fields:
 | `model.provider` | Your own provider credential, as a secret reference. Omit to use the model Albus supplies. |
 | `system_prompt` | Instructions. Albus prepends the current date and time. |
 | `tools` | Object, not list. `{"web_search": {}}` offers web search; `{"terminal": {}}` a persistent Linux sandbox. Omit a tool and the model never sees it. |
-| `mcp_servers` | `[{name, url, headers, allowed_tools}]`. Streamable HTTP only. The model sees tools as `<name>__<tool>`. |
+| `mcp_servers` | `[{name, url, headers, allowed_tools, auth}]`. Streamable HTTP only. The model sees tools as `<name>__<tool>`. `auth` defaults to `{"type": "albus_identity_jwt"}`: every request carries `Authorization: Bearer <JWT>` signed by Albus, issuer `https://oidc.albus.sh/organizations/<org-id>`, audience the `url`. Other types: `oauth2_client_credentials`, `bearer`. A `headers.Authorization` entry (literal or secret reference) replaces the identity token; a literal is how the caller passes a short-lived access token minted before the run. |
 | `memory` | `{"group": "support", "generation": ["end_of_invocation", "agent"]}`. Durable memory shared by every run with the same group, in any session. |
 | `max_steps` | Cap on model steps per run. |
 | `output_format` | JSON Schema the reply must satisfy. Every object needs `"additionalProperties": false` and every property in `required`. |
 
-Credentials are never inlined. Store them (`albus secrets create NAME`) and
-reference them as `albus.sh/secrets/<name>` in `headers` or
+Long-lived credentials are never inlined. Store them (`albus secrets create
+NAME`) and reference them as `albus.sh/secrets/<name>` in `headers` or
 `model.provider.credential`. Albus resolves the reference when the run starts;
-the value never appears in a response, a revision, or the audit log.
+the value never appears in a response, a revision, or the audit log. The one
+exception is a short-lived access token passed as a literal
+`headers.Authorization` value: the literal is stored in the agent revision and
+is readable there until the token expires, so keep its lifetime to minutes.
 
 ### Idempotency and retries
 
@@ -579,6 +582,7 @@ asyncio.run(main())
 | Building an agent step by step: keys, tools, secrets, MCP servers, memory, traces, revisions, audit log | https://docs.albus.sh/guides/build-an-agent.md |
 | Web search, terminal, memory | https://docs.albus.sh/guides/built-in-tools.md |
 | Your own model provider account | https://docs.albus.sh/guides/bring-your-own-key.md |
+| Authenticating Albus to your MCP server: the identity token, your own IdP, a token minted per run, static tokens, headers | https://docs.albus.sh/guides/mcp-server-auth.md |
 | Status codes and bodies | https://docs.albus.sh/reference/errors.md |
 | CLI reference | https://docs.albus.sh/reference/cli.md |
 | SDK reference | https://docs.albus.sh/reference/sdks.md |
